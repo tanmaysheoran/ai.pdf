@@ -7,3 +7,4 @@ dist/
 *.aipdf
 !samples/*.aipdf
 .DS_Store
+.claude/*
