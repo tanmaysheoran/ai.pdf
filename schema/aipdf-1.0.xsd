@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <xs:simpleType name="idType">
+    <xs:restriction base="xs:ID">
+      <xs:pattern value="[A-Za-z][A-Za-z0-9._:-]*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="bboxType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="-?[0-9]+(\.[0-9]+)?,-?[0-9]+(\.[0-9]+)?,-?[0-9]+(\.[0-9]+)?,-?[0-9]+(\.[0-9]+)?"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="roleType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="abstract"/>
+      <xs:enumeration value="acknowledgement"/>
+      <xs:enumeration value="annotation"/>
+      <xs:enumeration value="appendix"/>
+      <xs:enumeration value="body"/>
+      <xs:enumeration value="caption"/>
+      <xs:enumeration value="citation"/>
+      <xs:enumeration value="code"/>
+      <xs:enumeration value="definition"/>
+      <xs:enumeration value="equation"/>
+      <xs:enumeration value="figure"/>
+      <xs:enumeration value="footnote"/>
+      <xs:enumeration value="heading"/>
+      <xs:enumeration value="list-item"/>
+      <xs:enumeration value="note"/>
+      <xs:enumeration value="paragraph"/>
+      <xs:enumeration value="reference"/>
+      <xs:enumeration value="table"/>
+      <xs:enumeration value="title"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:attributeGroup name="blockAttrs">
+    <xs:attribute name="id" type="idType"/>
+    <xs:attribute name="page" type="xs:positiveInteger"/>
+    <xs:attribute name="bbox" type="bboxType"/>
+    <xs:attribute name="role" type="roleType"/>
+  </xs:attributeGroup>
+
+  <xs:complexType name="textBlock" mixed="true">
+    <xs:attributeGroup ref="blockAttrs"/>
+  </xs:complexType>
+
+  <xs:complexType name="citationType" mixed="true">
+    <xs:attributeGroup ref="blockAttrs"/>
+    <xs:attribute name="target" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="equationType" mixed="true">
+    <xs:attributeGroup ref="blockAttrs"/>
+    <xs:attribute name="notation" type="xs:string" default="text"/>
+  </xs:complexType>
+
+  <xs:complexType name="codeBlockType" mixed="true">
+    <xs:attributeGroup ref="blockAttrs"/>
+    <xs:attribute name="language" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="imageType">
+    <xs:attribute name="src" type="xs:string"/>
+    <xs:attribute name="alt" type="xs:string"/>
+    <xs:attributeGroup ref="blockAttrs"/>
+  </xs:complexType>
+
+  <xs:complexType name="figureType">
+    <xs:sequence>
+      <xs:element name="image" type="imageType" minOccurs="0"/>
+      <xs:element name="caption" type="textBlock" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="blockAttrs"/>
+    <xs:attribute name="alt" type="xs:string"/>
+    <xs:attribute name="source" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="cellType" mixed="true">
+    <xs:attribute name="header" type="xs:boolean" default="false"/>
+    <xs:attribute name="rowspan" type="xs:positiveInteger" default="1"/>
+    <xs:attribute name="colspan" type="xs:positiveInteger" default="1"/>
+  </xs:complexType>
+
+  <xs:complexType name="rowType">
+    <xs:sequence>
+      <xs:element name="cell" type="cellType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="tableBodyType">
+    <xs:sequence>
+      <xs:element name="row" type="rowType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="tableType">
+    <xs:sequence>
+      <xs:element name="caption" type="textBlock" minOccurs="0"/>
+      <xs:element name="thead" type="tableBodyType" minOccurs="0"/>
+      <xs:element name="tbody" type="tableBodyType" minOccurs="0"/>
+      <xs:element name="row" type="rowType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="blockAttrs"/>
+  </xs:complexType>
+
+  <xs:complexType name="listItemType" mixed="true">
+    <xs:attributeGroup ref="blockAttrs"/>
+  </xs:complexType>
+
+  <xs:complexType name="listType">
+    <xs:sequence>
+      <xs:element name="item" type="listItemType" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="blockAttrs"/>
+    <xs:attribute name="type">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="ordered"/>
+          <xs:enumeration value="unordered"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="definitionType" mixed="true">
+    <xs:attributeGroup ref="blockAttrs"/>
+    <xs:attribute name="term" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="definitionListType">
+    <xs:sequence>
+      <xs:element name="definition" type="definitionType" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="blockAttrs"/>
+  </xs:complexType>
+
+  <xs:complexType name="referenceType" mixed="true">
+    <xs:attributeGroup ref="blockAttrs"/>
+    <xs:attribute name="type" type="xs:string"/>
+    <xs:attribute name="target" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="referencesType">
+    <xs:sequence>
+      <xs:element name="reference" type="referenceType" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="blockAttrs"/>
+  </xs:complexType>
+
+  <xs:complexType name="sectionType">
+    <xs:choice maxOccurs="unbounded">
+      <xs:element name="title" type="textBlock"/>
+      <xs:element name="paragraph" type="textBlock"/>
+      <xs:element name="table" type="tableType"/>
+      <xs:element name="figure" type="figureType"/>
+      <xs:element name="equation" type="equationType"/>
+      <xs:element name="citation" type="citationType"/>
+      <xs:element name="codeBlock" type="codeBlockType"/>
+      <xs:element name="list" type="listType"/>
+      <xs:element name="definitionList" type="definitionListType"/>
+      <xs:element name="references" type="referencesType"/>
+      <xs:element name="note" type="textBlock"/>
+      <xs:element name="footnote" type="textBlock"/>
+      <xs:element name="annotation" type="textBlock"/>
+      <xs:element name="section" type="sectionType"/>
+    </xs:choice>
+    <xs:attribute name="id" type="idType" use="required"/>
+    <xs:attribute name="level" type="xs:positiveInteger" use="required"/>
+    <xs:attribute name="page" type="xs:positiveInteger"/>
+    <xs:attribute name="bbox" type="bboxType"/>
+    <xs:attribute name="role" type="roleType"/>
+  </xs:complexType>
+
+  <xs:complexType name="metadataType">
+    <xs:sequence>
+      <xs:element name="title" type="xs:string" minOccurs="0"/>
+      <xs:element name="subtitle" type="xs:string" minOccurs="0"/>
+      <xs:element name="author" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="created" type="xs:string" minOccurs="0"/>
+      <xs:element name="modified" type="xs:string" minOccurs="0"/>
+      <xs:element name="keywords" minOccurs="0">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="keyword" type="xs:string" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="classification" type="xs:string" minOccurs="0"/>
+      <xs:element name="language" type="xs:string" minOccurs="0"/>
+      <xs:element name="rights" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:element name="document">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="metadata" type="metadataType" minOccurs="0"/>
+        <xs:element name="section" type="sectionType" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <!-- version accepts any non-empty string to support 1.0, 2.5, etc. -->
+      <xs:attribute name="version" type="xs:string" use="required"/>
+      <xs:attribute name="id" type="idType"/>
+      <xs:attribute name="lang" type="xs:language"/>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>

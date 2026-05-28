@@ -1,0 +1,450 @@
+Here’s a significantly more complex, multi-factored XML document designed for AI-native PDF generation pipelines. It includes:
+
+* Rich metadata
+* Nested sections
+* Headers/footers
+* Multi-page layouts
+* Tables with styling hints
+* Figures/images
+* Footnotes
+* Citations/references
+* Lists
+* Code blocks
+* Mathematical expressions
+* Accessibility semantics
+* Annotations
+* Bookmarks/outlines
+* Embedded assets
+* Cross-references
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+
+<document
+    version="2.5"
+    id="enterprise-report-2026"
+    lang="en"
+    profile="AI-PDF-Extended">
+
+    <!-- ===================================================== -->
+    <!-- DOCUMENT METADATA -->
+    <!-- ===================================================== -->
+
+    <metadata>
+        <title>AI-Native Enterprise Transformation Report</title>
+        <subtitle>Semantic PDF Generation and Intelligent Compression</subtitle>
+
+        <author id="a1">
+            <name>Dr. Elena Vasquez</name>
+            <email>evasquez@example.org</email>
+            <organization>Open Semantic Systems</organization>
+        </author>
+
+        <contributors>
+            <contributor role="editor">Michael Tan</contributor>
+            <contributor role="reviewer">Priya Nair</contributor>
+            <contributor role="designer">AIPDF Studio</contributor>
+        </contributors>
+
+        <keywords>
+            <keyword>AI</keyword>
+            <keyword>PDF</keyword>
+            <keyword>Semantic Documents</keyword>
+            <keyword>Compression</keyword>
+            <keyword>Accessibility</keyword>
+        </keywords>
+
+        <created>2026-05-28T10:30:00Z</created>
+        <modified>2026-05-28T12:00:00Z</modified>
+
+        <classification level="confidentiality">internal</classification>
+
+        <language primary="en" secondary="fr,de"/>
+
+        <rights>
+            <license>CC-BY-4.0</license>
+            <copyright>Open Semantic Systems 2026</copyright>
+        </rights>
+    </metadata>
+
+    <!-- ===================================================== -->
+    <!-- LAYOUT DEFINITIONS -->
+    <!-- ===================================================== -->
+
+    <layout>
+        <pageSetup
+            size="A4"
+            orientation="portrait"
+            marginTop="72"
+            marginBottom="72"
+            marginLeft="64"
+            marginRight="64"/>
+
+        <header id="hdr1">
+            <text align="center">AI-Native Enterprise Transformation Report</text>
+        </header>
+
+        <footer id="ftr1">
+            <pageNumber format="Page %d of %total"/>
+        </footer>
+
+        <styles>
+
+            <style id="titleStyle">
+                <font family="Helvetica" size="28" weight="bold"/>
+                <color>#1F2937</color>
+                <spacing before="24" after="18"/>
+            </style>
+
+            <style id="bodyText">
+                <font family="Times-Roman" size="11"/>
+                <lineHeight>1.5</lineHeight>
+                <color>#222222</color>
+            </style>
+
+            <style id="tableHeader">
+                <font family="Helvetica" size="10" weight="bold"/>
+                <background>#E5E7EB</background>
+            </style>
+
+            <style id="codeStyle">
+                <font family="Courier" size="9"/>
+                <background>#F3F4F6</background>
+            </style>
+
+        </styles>
+    </layout>
+
+    <!-- ===================================================== -->
+    <!-- BOOKMARKS / OUTLINE -->
+    <!-- ===================================================== -->
+
+    <outline>
+        <bookmark target="sec-intro" title="Introduction"/>
+        <bookmark target="sec-architecture" title="System Architecture"/>
+        <bookmark target="sec-data" title="Compression Metrics"/>
+        <bookmark target="sec-appendix" title="Appendix"/>
+    </outline>
+
+    <!-- ===================================================== -->
+    <!-- EMBEDDED FILES -->
+    <!-- ===================================================== -->
+
+    <attachments>
+        <file
+            id="att1"
+            filename="compression-model.json"
+            mimeType="application/json"
+            relationship="source-data"/>
+
+        <file
+            id="att2"
+            filename="architecture-diagram.svg"
+            mimeType="image/svg+xml"
+            relationship="figure-source"/>
+    </attachments>
+
+    <!-- ===================================================== -->
+    <!-- MAIN CONTENT -->
+    <!-- ===================================================== -->
+
+    <body>
+
+        <!-- ============================================= -->
+        <!-- SECTION 1 -->
+        <!-- ============================================= -->
+
+        <section
+            id="sec-intro"
+            level="1"
+            pageStart="1"
+            semanticRole="chapter">
+
+            <title
+                id="title1"
+                role="title"
+                styleRef="titleStyle"
+                bbox="72,720,520,760">
+
+                Introduction
+            </title>
+
+            <paragraph
+                id="p1"
+                role="paragraph"
+                styleRef="bodyText"
+                bbox="72,660,520,710">
+
+                AI-native documents merge visual fidelity with semantic
+                intelligence, enabling machine-readable structure while
+                preserving publication-grade rendering quality.
+            </paragraph>
+
+            <list id="list1" type="unordered">
+                <item>Semantic tagging</item>
+                <item>AI retrieval optimization</item>
+                <item>Accessibility compliance</item>
+                <item>Embedded structured metadata</item>
+            </list>
+
+            <note
+                id="note1"
+                type="warning"
+                icon="warning">
+
+                Legacy PDF workflows may discard semantic relationships.
+            </note>
+
+            <footnote id="fn1">
+                Semantic preservation significantly improves downstream
+                LLM extraction accuracy.
+            </footnote>
+
+        </section>
+
+        <!-- ============================================= -->
+        <!-- SECTION 2 -->
+        <!-- ============================================= -->
+
+        <section
+            id="sec-architecture"
+            level="1"
+            pageStart="2"
+            semanticRole="chapter">
+
+            <title
+                id="title2"
+                role="title"
+                styleRef="titleStyle">
+
+                System Architecture
+            </title>
+
+            <paragraph
+                id="p2"
+                styleRef="bodyText">
+
+                The architecture combines layout-aware parsing,
+                semantic enrichment, and hybrid compression pipelines.
+            </paragraph>
+
+            <!-- FIGURE -->
+
+            <figure
+                id="fig1"
+                page="2"
+                bbox="72,320,520,620"
+                role="figure">
+
+                <image
+                    src="assets/architecture-diagram.png"
+                    alt="AI PDF architecture diagram"
+                    width="448"
+                    height="280"/>
+
+                <caption>
+                    Hybrid semantic rendering architecture.
+                </caption>
+            </figure>
+
+            <!-- TABLE -->
+
+            <table
+                id="tbl-compression"
+                page="2"
+                role="table"
+                styleRef="bodyText">
+
+                <caption>
+                    Compression benchmark comparison
+                </caption>
+
+                <columns>
+                    <column width="180"/>
+                    <column width="100"/>
+                    <column width="120"/>
+                    <column width="120"/>
+                </columns>
+
+                <thead styleRef="tableHeader">
+                    <row>
+                        <cell header="true">Method</cell>
+                        <cell header="true">Accuracy</cell>
+                        <cell header="true">Size Overhead</cell>
+                        <cell header="true">Latency</cell>
+                    </row>
+                </thead>
+
+                <tbody>
+
+                    <row>
+                        <cell>Token-aware semantic encoding</cell>
+                        <cell>99.2%</cell>
+                        <cell>2.8%</cell>
+                        <cell>120ms</cell>
+                    </row>
+
+                    <row>
+                        <cell>Binary object stream</cell>
+                        <cell>91.4%</cell>
+                        <cell>8.7%</cell>
+                        <cell>84ms</cell>
+                    </row>
+
+                    <row>
+                        <cell>Hybrid vector compression</cell>
+                        <cell>97.9%</cell>
+                        <cell>4.1%</cell>
+                        <cell>98ms</cell>
+                    </row>
+
+                </tbody>
+
+            </table>
+
+            <!-- CODE BLOCK -->
+
+            <codeBlock
+                id="code1"
+                language="python"
+                styleRef="codeStyle">
+
+def compress_semantic_graph(graph):
+    encoded = semantic_encoder.encode(graph)
+    optimized = optimizer.reduce(encoded)
+    return optimized
+            </codeBlock>
+
+        </section>
+
+        <!-- ============================================= -->
+        <!-- SECTION 3 -->
+        <!-- ============================================= -->
+
+        <section
+            id="sec-data"
+            level="1"
+            pageStart="3">
+
+            <title
+                id="title3"
+                role="title"
+                styleRef="titleStyle">
+
+                Mathematical Compression Model
+            </title>
+
+            <equation
+                id="eq1"
+                role="equation"
+                format="latex">
+
+                <![CDATA[
+                C = (S_o - S_c) / S_o * 100
+                ]]>
+            </equation>
+
+            <paragraph
+                id="p3"
+                styleRef="bodyText">
+
+                Where:
+            </paragraph>
+
+            <definitionList>
+
+                <definition term="S_o">
+                    Original document size
+                </definition>
+
+                <definition term="S_c">
+                    Compressed document size
+                </definition>
+
+                <definition term="C">
+                    Compression efficiency percentage
+                </definition>
+
+            </definitionList>
+
+            <!-- CHART DATA -->
+
+            <chart
+                id="chart1"
+                type="bar"
+                datasource="compressionMetrics">
+
+                <series name="Accuracy">
+                    <point label="Model A" value="99.2"/>
+                    <point label="Model B" value="97.4"/>
+                    <point label="Model C" value="95.8"/>
+                </series>
+
+            </chart>
+
+        </section>
+
+        <!-- ============================================= -->
+        <!-- REFERENCES -->
+        <!-- ============================================= -->
+
+        <references id="refs">
+
+            <reference id="ref1" type="standard">
+                ISO 32000-2:2020 — Document management — PDF 2.0
+            </reference>
+
+            <reference id="ref2" type="article">
+                Vasquez, E. Semantic Compression for AI-native Documents.
+                Journal of Intelligent Publishing, 2025.
+            </reference>
+
+        </references>
+
+        <!-- ============================================= -->
+        <!-- APPENDIX -->
+        <!-- ============================================= -->
+
+        <appendix id="sec-appendix">
+
+            <title>Appendix A — Accessibility Compliance</title>
+
+            <accessibility>
+
+                <tagging enabled="true"/>
+                <readingOrder verified="true"/>
+                <altTextCoverage percentage="100"/>
+                <wcag level="AA"/>
+
+            </accessibility>
+
+            <annotations>
+
+                <annotation
+                    id="ann1"
+                    type="comment"
+                    author="Reviewer">
+
+                    Verify multilingual font embedding support.
+                </annotation>
+
+            </annotations>
+
+        </appendix>
+
+    </body>
+
+    <!-- ===================================================== -->
+    <!-- CROSS REFERENCES -->
+    <!-- ===================================================== -->
+
+    <crossReferences>
+
+        <xref from="p2" to="tbl-compression"/>
+        <xref from="p3" to="eq1"/>
+        <xref from="fig1" to="att2"/>
+
+    </crossReferences>
+
+</document>
+```

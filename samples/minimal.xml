@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document version="1.0" id="doc1" lang="en">
+  <metadata>
+    <title>Minimal AIPDF Sample</title>
+    <author>AIPDF Project</author>
+  </metadata>
+  <section id="s1" level="1" page="1">
+    <title id="t1" page="1" bbox="72,720,420,748" role="title">Introduction</title>
+    <paragraph id="p1" page="1" bbox="72,684,500,710" role="paragraph">AI-native documents combine visual fidelity with semantic structure.</paragraph>
+    <table id="tbl1" page="1" bbox="72,600,420,670" role="table">
+      <caption id="cap1" page="1" bbox="72,672,420,684" role="caption">Compression targets</caption>
+      <row>
+        <cell header="true">Target</cell>
+        <cell header="true">Limit</cell>
+      </row>
+      <row>
+        <cell>Ideal overhead</cell>
+        <cell>&lt;3%</cell>
+      </row>
+      <row>
+        <cell>Maximum overhead</cell>
+        <cell>&lt;10%</cell>
+      </row>
+    </table>
+    <citation id="c1" page="1" bbox="72,560,500,580" role="citation" target="PDF-2.0">PDF associated files are used for the semantic payload.</citation>
+  </section>
+</document>
+

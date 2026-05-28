@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/css" href="aipdf.css"?>
+<document version="1.0" id="doc-comprehensive" lang="en">
+
+  <metadata>
+    <title>Comprehensive AIPDF Schema Feature Showcase</title>
+    <subtitle>All Supported Block Types, Attributes, and Structures in One Document</subtitle>
+    <author>AIPDF Team</author>
+    <author>Open Semantic Systems</author>
+    <created>2026-05-28</created>
+    <modified>2026-05-28</modified>
+    <keywords>
+      <keyword>AIPDF</keyword>
+      <keyword>semantic PDF</keyword>
+      <keyword>structured documents</keyword>
+      <keyword>AI-native format</keyword>
+      <keyword>Brotli compression</keyword>
+    </keywords>
+    <classification>public</classification>
+    <language>en</language>
+    <rights>CC-BY-4.0 — Open Semantic Systems 2026</rights>
+  </metadata>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 1: Introduction                                       -->
+  <!-- ============================================================ -->
+
+  <section id="s-intro" level="1" page="1">
+    <title id="t-intro" page="1" bbox="72,720,540,748" role="title">Introduction to AIPDF</title>
+
+    <paragraph id="p1" page="1" bbox="72,690,540,716" role="paragraph">The AIPDF format is an AI-native PDF extension that embeds a Brotli-compressed semantic XML layer as an associated file inside a valid PDF document. Legacy PDF readers ignore the embedded payload and display the visual content stream. AI-aware parsers extract the structure directly without OCR.</paragraph>
+
+    <paragraph id="p2" page="1" bbox="72,658,540,684" role="paragraph">The core invariant is simple: the PDF is the visual authority and the embedded XML is the machine-structure authority. Nothing is duplicated between the two representations. This keeps the semantic layer minimal and efficient.</paragraph>
+
+    <note id="note1" page="1" role="note">This document exercises every element and attribute defined in the AIPDF 1.0 schema to validate the full rendering and extraction pipeline across all SDK surfaces.</note>
+
+    <!-- Nested subsection -->
+    <section id="s-goals" level="2" page="1">
+      <title id="t-goals" page="1" role="title">Design Goals</title>
+
+      <paragraph id="p3" page="1" role="paragraph">The format was designed around four non-negotiable requirements that must all hold simultaneously:</paragraph>
+
+      <list id="list1" type="unordered">
+        <item id="item1" role="list-item">Semantic preservation without OCR or heuristic extraction</item>
+        <item id="item2" role="list-item">Full backward compatibility with legacy PDF 1.7 readers</item>
+        <item id="item3" role="list-item">Minimal size overhead via Brotli compression (target under 10%)</item>
+        <item id="item4" role="list-item">Universal AI parser support across all major SDK surfaces</item>
+        <item id="item5" role="list-item">Security hardening against prompt injection and DOCTYPE attacks</item>
+      </list>
+
+      <paragraph id="p4" page="1" role="paragraph">These goals are achieved through a carefully layered architecture: scraper-based HTML normalization, quick-xml structural validation, brotli stream compression, and hand-crafted PDF byte assembly using only base-14 fonts.</paragraph>
+    </section>
+
+    <section id="s-formats" level="2" page="1">
+      <title id="t-formats" page="1" role="title">Supported Input Formats</title>
+
+      <paragraph id="p5" page="1" role="paragraph">The AIPDF toolchain accepts four source formats, each converted through a dedicated normalizer to canonical semantic XML before embedding:</paragraph>
+
+      <list id="list2" type="ordered">
+        <item id="item6" role="list-item">XML — direct schema-validated input, no conversion required</item>
+        <item id="item7" role="list-item">Markdown — heading-based section detection with paragraph blocks</item>
+        <item id="item8" role="list-item">HTML — scraper DOM walk covering all block-level elements</item>
+        <item id="item9" role="list-item">Typst — heading syntax mapping to Markdown normalizer</item>
+      </list>
+    </section>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 2: Architecture                                       -->
+  <!-- ============================================================ -->
+
+  <section id="s-arch" level="1" page="2">
+    <title id="t-arch" page="2" role="title">System Architecture</title>
+
+    <paragraph id="p6" page="2" role="paragraph">The architecture consists of three layers: source input normalization, semantic XML validation and compression, and PDF assembly with embedded payload. Each layer has a well-defined interface and can be exercised independently through the public API.</paragraph>
+
+    <figure id="fig1" page="2" bbox="72,560,540,740" role="figure" alt="AIPDF processing pipeline diagram">
+      <image src="1.jpg" alt="AIPDF system architecture: source input normalization through semantic XML validation to PDF assembly with embedded Brotli-compressed payload"/>
+      <caption id="cap-fig1" page="2" role="caption">Figure 1: The AIPDF processing pipeline from raw source input to the final .aipdf file. Each stage has a clearly defined interface: source.rs handles normalization, security.rs handles sanitization, xml.rs handles validation, and pdf.rs or render.rs handles final assembly.</caption>
+    </figure>
+
+    <table id="tbl1" page="2" role="table">
+      <caption id="cap-tbl1" role="caption">Core Module Responsibilities</caption>
+      <thead>
+        <row>
+          <cell header="true">Module</cell>
+          <cell header="true">File</cell>
+          <cell header="true">Responsibility</cell>
+        </row>
+      </thead>
+      <tbody>
+        <row>
+          <cell>source</cell>
+          <cell>source.rs</cell>
+          <cell>HTML, Markdown, Typst to XML conversion</cell>
+        </row>
+        <row>
+          <cell>security</cell>
+          <cell>security.rs</cell>
+          <cell>Sanitize XML, reject disallowed markers</cell>
+        </row>
+        <row>
+          <cell>xml</cell>
+          <cell>xml.rs</cell>
+          <cell>Structural validation, reading order, tables</cell>
+        </row>
+        <row>
+          <cell>pdf</cell>
+          <cell>pdf.rs</cell>
+          <cell>Brotli compress, minimal PDF assembly</cell>
+        </row>
+        <row>
+          <cell>render</cell>
+          <cell>render.rs</cell>
+          <cell>Full-quality multi-page PDF layout engine</cell>
+        </row>
+        <row>
+          <cell>markdown</cell>
+          <cell>markdown.rs</cell>
+          <cell>XML to Markdown and MDAST JSON export</cell>
+        </row>
+        <row>
+          <cell>onto</cell>
+          <cell>onto.rs</cell>
+          <cell>Columnar ONTO export for LLM ingestion</cell>
+        </row>
+      </tbody>
+    </table>
+
+    <section id="s-pipeline" level="2" page="2">
+      <title id="t-pipeline" page="2" role="title">Data Flow</title>
+
+      <paragraph id="p7" page="2" role="paragraph">Every input passes through the same six-stage pipeline regardless of source format. This ensures consistent security properties and validation guarantees across all entry points.</paragraph>
+
+      <codeBlock id="code1" page="2" language="text">Input (XML / MD / HTML / Typst)
+  -&gt; source::semantic_xml_from_source
+  -&gt; security::sanitize_xml
+  -&gt; xml::validate_xml
+  -&gt; pdf::brotli_compress
+  -&gt; render::build_rendered_pdf  (Full mode)
+  -&gt; .aipdf file</codeBlock>
+
+      <annotation id="ann1" page="2" role="annotation">The data flow is strictly unidirectional. No stage has feedback into a prior stage. This makes the pipeline fully testable at each boundary.</annotation>
+    </section>
+
+    <section id="s-render" level="2" page="3">
+      <title id="t-render" page="3" role="title">Render Modes</title>
+
+      <paragraph id="p8" page="3" role="paragraph">Two render modes are available. Minimal mode produces a compact 9-object PDF with plain text visible content. Full mode activates the production layout engine with styled headings, tables, code blocks, and multi-page flow.</paragraph>
+
+      <table id="tbl2" page="3" role="table">
+        <caption id="cap-tbl2" role="caption">Render Mode Comparison</caption>
+        <thead>
+          <row>
+            <cell header="true">Property</cell>
+            <cell header="true">Minimal Mode</cell>
+            <cell header="true">Full Mode</cell>
+          </row>
+        </thead>
+        <tbody>
+          <row>
+            <cell>PDF objects</cell>
+            <cell>9 (fixed)</cell>
+            <cell>Dynamic (by page count)</cell>
+          </row>
+          <row>
+            <cell>Visual quality</cell>
+            <cell>Plain text</cell>
+            <cell>Styled headings, tables, code</cell>
+          </row>
+          <row>
+            <cell>Font resources</cell>
+            <cell>Helvetica only</cell>
+            <cell>Helvetica, Helvetica-Bold, Courier</cell>
+          </row>
+          <row>
+            <cell>Multi-page support</cell>
+            <cell>No</cell>
+            <cell>Yes (cursor-flow layout)</cell>
+          </row>
+          <row>
+            <cell>Semantic layer</cell>
+            <cell>Embedded (identical)</cell>
+            <cell>Embedded (identical)</cell>
+          </row>
+        </tbody>
+      </table>
+
+      <codeBlock id="code2" page="3" language="rust">// Select render mode via BuildOptions
+let pdf = build_aipdf(&amp;xml, &amp;BuildOptions {
+    title: "My Document".to_string(),
+    render: RenderMode::Full,
+    page: PageOptions::letter(),
+    ..Default::default()
+})?;</codeBlock>
+    </section>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 3: Mathematical Model                                  -->
+  <!-- ============================================================ -->
+
+  <section id="s-math" level="1" page="4">
+    <title id="t-math" page="4" role="title">Compression Mathematics</title>
+
+    <paragraph id="p9" page="4" role="paragraph">The compression efficiency of the semantic layer can be expressed as a dimensionless ratio comparing the compressed payload size to the original XML size. Higher efficiency means lower overhead in the final PDF file.</paragraph>
+
+    <equation id="eq1" page="4" role="equation" notation="text">E = (1 - C / X) * 100</equation>
+
+    <definitionList id="defs1" page="4">
+      <definition id="def1" term="E">Compression efficiency as a percentage (0 to 100)</definition>
+      <definition id="def2" term="C">Brotli-compressed XML byte count</definition>
+      <definition id="def3" term="X">Raw UTF-8 XML byte count before compression</definition>
+    </definitionList>
+
+    <paragraph id="p10" page="4" role="paragraph">For typical document XML, Brotli at level 6 achieves efficiency values between 70 and 85 percent, meaning the compressed payload is 15 to 30 percent of the original XML size. This translates to a PDF overhead of 3 to 10 percent for most document sizes above 10 KB.</paragraph>
+
+    <equation id="eq2" page="4" role="equation" notation="text">overhead_pct = C / PDF_size_without_semantic * 100</equation>
+
+    <footnote id="fn1" page="4" role="footnote">Brotli level 6 is used as the default. Level 11 achieves 5 to 8 percent higher compression at the cost of significantly longer encode times. For interactive document builders, level 6 is the correct tradeoff.</footnote>
+
+    <footnote id="fn2" page="4" role="footnote">The 16 MiB size limit on semantic XML payloads is a security invariant, not a practical constraint. Real-world documents are typically under 1 MiB of raw XML.</footnote>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 4: Security Model                                     -->
+  <!-- ============================================================ -->
+
+  <section id="s-security" level="1" page="5">
+    <title id="t-security" page="5" role="title">Security Model</title>
+
+    <paragraph id="p11" page="5" role="paragraph">The security model is designed to prevent three attack classes: prompt injection via the semantic layer, PDF action exploitation, and denial-of-service via oversized payloads. Each is handled at a different layer of the pipeline.</paragraph>
+
+    <note id="note2" page="5" role="note">Security sanitization runs on every XML path — both at build time (before embedding) and at extraction time (after decompression). This provides defense in depth: a tampered .aipdf file cannot inject unsanitized content into the extraction pipeline.</note>
+
+    <section id="s-sanitize" level="2" page="5">
+      <title id="t-sanitize" page="5" role="title">Disallowed Markers</title>
+
+      <paragraph id="p12" page="5" role="paragraph">The sanitize_xml function performs a case-insensitive substring search for each disallowed marker. Any match causes the entire document to be rejected with an error. The following markers are blocked:</paragraph>
+
+      <list id="list3" type="unordered">
+        <item id="item10">DOCTYPE declarations (prevent entity expansion attacks)</item>
+        <item id="item11">xml-stylesheet processing instructions (prevent XSLT injection)</item>
+        <item id="item12">script elements (prevent inline script embedding)</item>
+        <item id="item13">PDF JS action type (prevent script execution via PDF actions)</item>
+        <item id="item14">PDF Launch action type (prevent arbitrary process execution)</item>
+        <item id="item15">LLM injection prefix strings (prevent prompt hijacking)</item>
+        <item id="item16">AI instruction override patterns (prevent AI system manipulation)</item>
+      </list>
+
+      <annotation id="ann2" page="5" role="annotation">The marker list is conservative by design. False positives (legitimate documents rejected) are preferable to false negatives (malicious documents accepted). Document authors who need to discuss these terms should use character entity escaping or reformulation.</annotation>
+    </section>
+
+    <section id="s-limits" level="2" page="5">
+      <title id="t-limits" page="5" role="title">Size Limits</title>
+
+      <paragraph id="p13" page="5" role="paragraph">A hard 16 MiB limit on the uncompressed XML payload prevents memory exhaustion attacks. The limit is checked after decompression to catch compressed bombs. Decompression itself is performed with a 4 KiB streaming buffer to avoid large intermediate allocations.</paragraph>
+
+      <codeBlock id="code3" page="5" language="rust">if trimmed.len() &gt; 16 * 1024 * 1024 {
+    return Err(AipdfError::InvalidXml(
+        "semantic XML exceeds 16 MiB safety limit".to_string(),
+    ));
+}</codeBlock>
+    </section>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 5: SDK Reference                                      -->
+  <!-- ============================================================ -->
+
+  <section id="s-sdk" level="1" page="6">
+    <title id="t-sdk" page="6" role="title">SDK Reference</title>
+
+    <paragraph id="p14" page="6" role="paragraph">Three SDK surfaces expose the same semantic API: the Rust core library plus CLI, the Python SDK, and the TypeScript/npm package. All three implement the same output shape for reading order, Markdown export, and ONTO export.</paragraph>
+
+    <section id="s-rust" level="2" page="6">
+      <title id="t-rust" page="6" role="title">Rust Core Library</title>
+
+      <paragraph id="p15" page="6" role="paragraph">The Rust library is the reference implementation. All other SDKs are ports of its logic. The core public API exposes document building, extraction, inspection, validation, and four export functions.</paragraph>
+
+      <codeBlock id="code4" page="6" language="rust">use aipdf::{AipdfDocument, BuildOptions, RenderMode, PageOptions};
+
+// Open and query
+let doc = AipdfDocument::open("document.aipdf")?;
+let xml    = doc.to_xml()?;
+let md     = doc.to_markdown()?;
+let onto   = doc.to_onto()?;
+let blocks = doc.get_reading_order()?;
+let tables = doc.get_tables()?;
+let cites  = doc.find_citations()?;</codeBlock>
+
+      <note id="note3" page="6" role="note">The CLI wraps the Rust library with a thin clap-based argument parser. It adds no logic of its own — every command maps directly to one or two library calls.</note>
+    </section>
+
+    <section id="s-python" level="2" page="6">
+      <title id="t-python" page="6" role="title">Python SDK</title>
+
+      <paragraph id="p16" page="6" role="paragraph">The Python SDK is a pure-Python implementation depending only on the brotli package (version 1.1.0 or later). HTML conversion uses the stdlib html.parser module with no external dependencies. The ONTO encoder mirrors the Rust scalar encoding rules exactly.</paragraph>
+
+      <codeBlock id="code5" page="6" language="python">import aipdf
+
+doc = aipdf.open("document.aipdf")
+print(doc.to_markdown())
+print(doc.to_onto())
+
+# Build from various sources
+from aipdf import build_from_source
+xml = build_from_source(html_content, "html")
+xml = build_from_source(md_content,   "markdown")
+xml = build_from_source(typ_content,  "typst")</codeBlock>
+    </section>
+
+    <section id="s-typescript" level="2" page="7">
+      <title id="t-typescript" page="7" role="title">TypeScript SDK</title>
+
+      <paragraph id="p17" page="7" role="paragraph">The TypeScript SDK is an ESM module with zero runtime dependencies. It uses Node's built-in zlib module for Brotli decompression. HTML and Markdown conversion use regex-based tokenization. The package is tested with Vitest and published to npm.</paragraph>
+
+      <codeBlock id="code6" page="7" language="typescript">import { open, buildFromSource } from 'aipdf';
+
+const doc = await open('document.aipdf');
+console.log(doc.toMarkdown());
+console.log(doc.toOnto());
+
+// Build from source
+const xml = buildFromSource(htmlContent, 'html');
+const xmlMd = buildFromSource(markdownContent, 'markdown');</codeBlock>
+
+      <annotation id="ann3" page="7" role="annotation">The TypeScript SDK targets Node 18+ for the built-in Brotli support. Browser environments require a Brotli polyfill since the Web Crypto API does not include Brotli decompression.</annotation>
+    </section>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 6: Export Formats                                     -->
+  <!-- ============================================================ -->
+
+  <section id="s-exports" level="1" page="7">
+    <title id="t-exports" page="7" role="title">Export Formats</title>
+
+    <paragraph id="p18" page="7" role="paragraph">The semantic layer can be exported in four representations, each optimized for a different downstream consumer. All four formats are available through the CLI, Python SDK, and TypeScript SDK.</paragraph>
+
+    <table id="tbl3" page="7" role="table">
+      <caption id="cap-tbl3" role="caption">Export Format Comparison</caption>
+      <thead>
+        <row>
+          <cell header="true">Format</cell>
+          <cell header="true">Command</cell>
+          <cell header="true">Use Case</cell>
+          <cell header="true">Token Efficiency</cell>
+        </row>
+      </thead>
+      <tbody>
+        <row>
+          <cell>XML</cell>
+          <cell>--format xml</cell>
+          <cell>Full semantic round-trip, debugging</cell>
+          <cell>Low</cell>
+        </row>
+        <row>
+          <cell>Markdown</cell>
+          <cell>--format markdown</cell>
+          <cell>Human-readable rendering, diff tools</cell>
+          <cell>Medium</cell>
+        </row>
+        <row>
+          <cell>Markdown AST JSON</cell>
+          <cell>--format markdown-ast</cell>
+          <cell>Programmatic AST traversal</cell>
+          <cell>Low</cell>
+        </row>
+        <row>
+          <cell>ONTO</cell>
+          <cell>--format onto</cell>
+          <cell>LLM token-efficient ingestion</cell>
+          <cell>High</cell>
+        </row>
+      </tbody>
+    </table>
+
+    <citation id="cit1" page="7" role="citation" target="PDF-2.0">PDF 2.0 (ISO 32000-2) associated files provide the embedding mechanism used for the semantic payload. The EmbeddedFile stream uses the custom subtype marker /application#aipdf+xml+br to distinguish it from other associated files a PDF may contain.</citation>
+
+    <citation id="cit2" page="7" role="citation" target="XMP">The XMP metadata stream embedded in the PDF includes AIPDF-namespace fields: Version, SemanticFile, SemanticEncoding, ContentAuthority, OCRPolicy, and byte counts. These allow AI systems to detect the semantic layer without performing a full byte scan.</citation>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 7: Definition Lists                                   -->
+  <!-- ============================================================ -->
+
+  <section id="s-glossary" level="1" page="8">
+    <title id="t-glossary" page="8" role="title">Glossary</title>
+
+    <paragraph id="p19" page="8" role="paragraph">Key terms used throughout this specification and the AIPDF codebase:</paragraph>
+
+    <definitionList id="defs2" page="8">
+      <definition id="def4" term="AIPDF">AI-native PDF extension format. A valid PDF 1.7 file with a Brotli-compressed semantic XML payload embedded as an associated file.</definition>
+      <definition id="def5" term="semantic layer">The embedded aipdf-semantic.xml.br associated file containing the machine-readable document structure. Absent in plain PDFs; present in all .aipdf files.</definition>
+      <definition id="def6" term="associated file">A PDF 2.0 concept (also backported to PDF 1.7 via the AF array) for files embedded inside a PDF and logically associated with its content.</definition>
+      <definition id="def7" term="ONTO format">A columnar, token-efficient export representation for LLM ingestion. Emits Document, Sections, Blocks, Tables, Figures, and References as tab-separated records.</definition>
+      <definition id="def8" term="RenderMode">An enum with two variants: Minimal (9-object hand-crafted PDF, default) and Full (production layout engine with multi-page flow and styled elements).</definition>
+      <definition id="def9" term="SemanticBlock">A struct representing a single semantic unit extracted from the XML: title, paragraph, caption, equation, citation, cell, item, codeBlock, reference, footnote, or note.</definition>
+      <definition id="def10" term="sanitize_xml">The security gate function that rejects DOCTYPE declarations, inline scripts, prompt injection strings, and other disallowed markers from XML payloads before validation or compression.</definition>
+    </definitionList>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 8: References                                         -->
+  <!-- ============================================================ -->
+
+  <section id="s-refs" level="1" page="8">
+    <title id="t-refs" page="8" role="title">References</title>
+
+    <references id="refs1" page="8">
+      <reference id="ref1" type="standard" target="ISO32000">ISO 32000-2:2020 — Document management — Portable Document Format — Part 2: PDF 2.0. International Organization for Standardization, Geneva, 2020.</reference>
+      <reference id="ref2" type="article" target="brotli">Alakuijala, J., van Asseldonk, R., Rubin, S., Kliuchnikov, I., Obryk, R., Szabadka, Z., and Vandevenne, L. Brotli: A General-Purpose Data Compressor. ACM Transactions on the Web, 13(1), 2019.</reference>
+      <reference id="ref3" type="spec" target="xsd11">Peterson, D., Gao, S., Malhotra, A., Sperberg-McQueen, C. M., Thompson, H. S., and Biron, P. V. (Eds.) W3C XML Schema Definition Language (XSD) 1.1 Part 1: Structures. W3C Recommendation, April 5, 2012.</reference>
+      <reference id="ref4" type="rfc" target="rfc7932">Alakuijala, J. and Szabadka, Z. Brotli Compressed Data Format. RFC 7932. IETF, July 2016.</reference>
+      <reference id="ref5" type="tool" target="quick-xml">Felber, J. quick-xml: High performance XML reader and writer. Rust crate. https://crates.io/crates/quick-xml</reference>
+      <reference id="ref6" type="tool" target="scraper">Webb, C. scraper: HTML parsing and querying with CSS selectors. Rust crate. https://crates.io/crates/scraper</reference>
+    </references>
+  </section>
+
+</document>

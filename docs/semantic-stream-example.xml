@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document version="1.0" id="example" lang="en">
+  <section id="s1" level="1" page="2">
+    <title id="b1" page="2" bbox="100,120,400,160" role="title">Introduction</title>
+    <paragraph id="b2" page="2" bbox="100,180,500,240" role="paragraph">AI-native documents combine visual fidelity with semantic structure.</paragraph>
+  </section>
+</document>
+

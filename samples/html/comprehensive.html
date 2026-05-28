@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Comprehensive AIPDF HTML Feature Showcase</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+      font-size: 16px;
+      line-height: 1.75;
+      color: #24292f;
+      background: #ffffff;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 3rem 2rem 6rem;
+    }
+
+    /* ── Headings ─────────────────────────────────────────────────────── */
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #0d1117;
+      margin: 0 0 1.5rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 3px solid #0969da;
+      letter-spacing: -0.03em;
+    }
+    h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #0d1117;
+      margin: 2.75rem 0 0.85rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid #d0d7de;
+      letter-spacing: -0.02em;
+    }
+    h3 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #0d1117;
+      margin: 2rem 0 0.6rem;
+    }
+    h4 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #32383f;
+      margin: 1.75rem 0 0.5rem;
+    }
+    h5 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #57606a;
+      margin: 1.5rem 0 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    h6 {
+      font-size: 0.825rem;
+      font-weight: 700;
+      color: #8b949e;
+      margin: 1.25rem 0 0.35rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* ── Paragraphs ───────────────────────────────────────────────────── */
+    p {
+      margin: 0 0 1rem;
+      color: #24292f;
+    }
+
+    /* ── Lists ────────────────────────────────────────────────────────── */
+    ul, ol {
+      margin: 0.25rem 0 1.25rem 1.75rem;
+      padding: 0;
+    }
+    li {
+      margin: 0.4rem 0;
+      color: #24292f;
+    }
+    ul li::marker { color: #0969da; }
+    ol li::marker { color: #0969da; font-weight: 700; }
+
+    /* ── Tables ───────────────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px #d0d7de;
+    }
+    caption {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #57606a;
+      margin-bottom: 0.6rem;
+      text-align: left;
+      caption-side: top;
+    }
+    th {
+      background: #f6f8fa;
+      color: #0d1117;
+      font-weight: 700;
+      text-align: left;
+      padding: 0.65rem 1rem;
+      border-bottom: 2px solid #d0d7de;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td {
+      padding: 0.55rem 1rem;
+      border-bottom: 1px solid #e6edf3;
+      color: #24292f;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #f6f8fa; }
+    tr:hover td { background: #eaf2ff; transition: background 0.1s; }
+
+    /* ── Inline code ──────────────────────────────────────────────────── */
+    code {
+      font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+      font-size: 0.875em;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 5px;
+      padding: 0.15em 0.4em;
+      color: #cf222e;
+    }
+
+    /* ── Code blocks ──────────────────────────────────────────────────── */
+    pre {
+      margin: 1.1rem 0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    pre code {
+      display: block;
+      background: #161b22;
+      border: none;
+      color: #e6edf3;
+      font-size: 0.875rem;
+      line-height: 1.65;
+      padding: 1.4rem 1.6rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* ── Blockquotes ──────────────────────────────────────────────────── */
+    blockquote {
+      border-left: 5px solid #0969da;
+      background: #f6f8fa;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+    blockquote p {
+      margin: 0;
+      color: #57606a;
+      font-style: italic;
+    }
+
+    /* ── Figures ──────────────────────────────────────────────────────── */
+    figure {
+      margin: 2.25rem 0;
+      text-align: center;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 10px;
+      padding: 1.75rem;
+    }
+    figure img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 6px;
+      border: 1px solid #d0d7de;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: block;
+      margin: 0 auto;
+    }
+    figcaption {
+      margin-top: 1rem;
+      font-size: 0.875rem;
+      color: #57606a;
+      font-style: italic;
+      line-height: 1.6;
+    }
+
+    /* ── Semantic containers ──────────────────────────────────────────── */
+    article {
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+      margin: 2rem 0;
+    }
+    article h2 {
+      margin-top: 0;
+      border-bottom: none;
+      padding-bottom: 0;
+      font-size: 1.25rem;
+      color: #0969da;
+    }
+
+    aside {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-left: 5px solid #f59e0b;
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0;
+    }
+    aside h3 {
+      margin-top: 0;
+      color: #b45309;
+      font-size: 1rem;
+    }
+
+    section { margin: 1.5rem 0; }
+
+    /* ── Utility ──────────────────────────────────────────────────────── */
+    hr {
+      border: none;
+      border-top: 1px solid #e6edf3;
+      margin: 2rem 0;
+    }
+    a { color: #0969da; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { font-weight: 700; }
+    em { font-style: italic; }
+  </style>
+</head>
+<body>
+
+  <h1>Comprehensive HTML Feature Showcase</h1>
+
+  <p>This document demonstrates every HTML element supported by the AIPDF HTML converter. It tests the full rendering pipeline from HTML input through semantic XML to production-quality PDF output, covering headings, paragraphs, lists, tables, code blocks, blockquotes, and figures.</p>
+
+  <h2>Paragraphs and Text</h2>
+
+  <p>The AIPDF format preserves document structure semantically. Paragraphs are the primary text block, capturing prose content. Long paragraphs are word-wrapped using precise Helvetica character-width metrics to ensure accurate line breaks in the rendered PDF output.</p>
+
+  <p>Multiple consecutive paragraphs are each emitted as individual semantic paragraph blocks. Each block receives a unique stable ID for cross-referencing and ordered extraction. The semantic layer stores no embeddings, model output, or executable content.</p>
+
+  <p>AIPDF files are valid PDF 1.7 documents. Legacy PDF readers display the visual content stream while ignoring the embedded associated file. AI-aware parsers detect the marker, extract the Brotli-compressed payload, and parse the structured XML directly.</p>
+
+  <h2>Unordered Lists</h2>
+
+  <p>Key features of the AIPDF format:</p>
+  <ul>
+    <li>Brotli-compressed semantic XML embedded as an associated file</li>
+    <li>Full PDF 1.7 compliance — readable by any PDF viewer</li>
+    <li>Zero OCR required for machine-readable consumption</li>
+    <li>Schema-validated structure with stable block IDs</li>
+    <li>Three SDK surfaces: Rust (core + CLI), Python, and TypeScript</li>
+    <li>Export to XML, Markdown, Markdown AST JSON, and ONTO columnar format</li>
+  </ul>
+
+  <h2>Ordered Lists</h2>
+
+  <p>Steps to produce an AIPDF document:</p>
+  <ol>
+    <li>Author content in XML, Markdown, HTML, or Typst format</li>
+    <li>Run the CLI: aipdf build input.html --render full -o output.aipdf</li>
+    <li>Distribute the .aipdf file — legacy readers see the PDF, AI readers extract the XML</li>
+    <li>Use the CLI, Python SDK, or TypeScript SDK to query the semantic layer</li>
+    <li>Export to your preferred format for downstream processing</li>
+  </ol>
+
+  <h2>Tables</h2>
+
+  <table>
+    <caption>Compression Method Comparison</caption>
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Ratio</th>
+        <th>Speed</th>
+        <th>Best For</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Brotli 6</td>
+        <td>85%</td>
+        <td>Fast</td>
+        <td>General documents</td>
+      </tr>
+      <tr>
+        <td>Brotli 11</td>
+        <td>92%</td>
+        <td>Slow</td>
+        <td>Archive and storage</td>
+      </tr>
+      <tr>
+        <td>Gzip 9</td>
+        <td>78%</td>
+        <td>Medium</td>
+        <td>Legacy compatibility</td>
+      </tr>
+      <tr>
+        <td>Zstd 3</td>
+        <td>83%</td>
+        <td>Very fast</td>
+        <td>Real-time encoding</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>SDK Support Matrix</h3>
+
+  <table>
+    <caption>Feature Support Across SDK Surfaces</caption>
+    <thead>
+      <tr>
+        <th>Feature</th>
+        <th>Rust CLI</th>
+        <th>Python SDK</th>
+        <th>TypeScript SDK</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Build from XML</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Build from HTML</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Build from Markdown</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Build from Typst</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Export to Markdown</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Export to ONTO</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Full render mode</td>
+        <td>Yes</td>
+        <td>No</td>
+        <td>No</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Code Blocks</h2>
+
+  <h3>Rust Example</h3>
+  <pre><code class="language-rust">use aipdf::{build_aipdf, BuildOptions, RenderMode, PageOptions};
+
+fn main() -&gt; aipdf::Result&lt;()&gt; {
+    let xml = std::fs::read_to_string("document.xml")?;
+    let pdf = build_aipdf(&amp;xml, &amp;BuildOptions {
+        title: "My Document".to_string(),
+        render: RenderMode::Full,
+        page: PageOptions::a4(),
+        ..Default::default()
+    })?;
+    std::fs::write("document.aipdf", pdf)?;
+    Ok(())
+}</code></pre>
+
+  <h3>Python Example</h3>
+  <pre><code class="language-python">import aipdf
+
+# Open an existing document
+doc = aipdf.open("document.aipdf")
+
+# Export in multiple formats
+print(doc.to_markdown())
+print(doc.to_onto())
+
+# Access structured blocks in reading order
+for block in doc.get_reading_order():
+    print(f"{block['kind']}: {block['text'][:60]}")
+
+# Build from HTML source
+from aipdf import build_from_source
+xml = build_from_source(html_content, "html")
+pdf_bytes = aipdf.build(xml, title="My Doc")</code></pre>
+
+  <h3>TypeScript Example</h3>
+  <pre><code class="language-typescript">import { open, buildFromSource } from 'aipdf';
+
+// Build from HTML source
+const xml = buildFromSource(htmlContent, 'html');
+
+// Open and query
+const doc = await open('document.aipdf');
+const blocks = doc.getReadingOrder();
+const markdown = doc.toMarkdown();
+const onto = doc.toOnto();
+
+console.log(`Loaded ${blocks.length} semantic blocks`);</code></pre>
+
+  <h3>Shell Commands</h3>
+  <pre><code class="language-bash"># Build with full rendering from HTML
+aipdf build samples/comprehensive.html --render full --page-size letter -o out.aipdf
+
+# Inspect the embedded semantic layer
+aipdf inspect out.aipdf
+
+# Validate structural correctness
+aipdf validate out.aipdf
+
+# Export to ONTO format for LLM ingestion
+aipdf export out.aipdf --format onto</code></pre>
+
+  <h2>Blockquotes</h2>
+
+  <blockquote>
+    The PDF format has become the de facto standard for document exchange. AIPDF extends this foundation by embedding a machine-readable semantic layer, enabling AI systems to access structured content without OCR or heuristic parsing.
+  </blockquote>
+
+  <blockquote>
+    Brotli achieves significantly better compression ratios than gzip for text content at comparable decompression speeds, making it ideal for the XML semantic payloads embedded in AIPDF files.
+  </blockquote>
+
+  <blockquote>
+    AI-native document formats must balance human readability, machine accessibility, and backward compatibility. AIPDF demonstrates that all three are achievable in a single file without compromise.
+  </blockquote>
+
+  <h2>Figures and Images</h2>
+
+  <figure>
+    <img src="1.jpg" alt="AIPDF system architecture diagram showing the processing pipeline from source documents to rendered PDF with embedded semantic layer"/>
+    <figcaption>Figure 1: The AIPDF processing pipeline. Source documents in XML, Markdown, HTML, or Typst are converted to semantic XML, Brotli-compressed, and embedded in a standards-compliant PDF 1.7 file. Legacy PDF readers display the visual content; AI-aware parsers extract the structured semantic layer directly.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="1.jpg" alt="Compression ratio comparison chart across Brotli levels 1 through 11"/>
+    <figcaption>Figure 2: Compression ratio versus encode time for Brotli at levels 1–11. Level 6 offers the best tradeoff for document workflows: near-maximum compression at near-minimum latency.</figcaption>
+  </figure>
+
+  <h2>Nested Sections</h2>
+
+  <h3>Subsection: Security Model</h3>
+  <p>The AIPDF security model is based on three principles that prevent payload injection attacks:</p>
+  <ul>
+    <li>Sanitization rejects DOCTYPE declarations, inline script content, and prompt injection markers</li>
+    <li>Structural validation enforces schema compliance before embedding</li>
+    <li>The semantic layer never contains embeddings, model output, or executable content</li>
+  </ul>
+
+  <h4>Disallowed Markers</h4>
+  <p>The sanitizer rejects any XML payload containing the following strings regardless of case:</p>
+  <ul>
+    <li>DOCTYPE</li>
+    <li>xml-stylesheet processing instruction</li>
+    <li>script elements</li>
+    <li>PDF JavaScript and Launch action types</li>
+    <li>LLM injection directives (prompt prefix strings)</li>
+    <li>AI system override strings (instruction injection patterns)</li>
+  </ul>
+
+  <h5>Implementation Detail</h5>
+  <p>Character widths for word-wrap are measured in 1/1000 pt units using the complete Adobe Helvetica metrics table for all ASCII printable characters. Both regular and bold weights are supported with separate width tables.</p>
+
+  <h6>PDF Object Structure</h6>
+  <p>The minimal render mode produces exactly 9 PDF objects. The full render mode produces a dynamic number of objects: catalog, page tree, one page object per page, font resources, content streams, XMP metadata, embedded file spec, and the Brotli-compressed semantic stream.</p>
+
+  <h2>Container Elements</h2>
+
+  <article>
+    <h2>ONTO Export Format</h2>
+    <p>The ONTO format is a columnar, token-efficient representation designed for LLM ingestion. It uses pipe and caret delimiters for table data and applies scalar encoding rules to prevent delimiter collision in cell content.</p>
+
+    <pre><code class="language-text">Document  title  Comprehensive AIPDF Feature Showcase
+Sections  id  level  title
+  s1  1  Introduction
+  s2  2  Architecture
+Blocks  id  kind  page  text
+  b1  paragraph  1  The AIPDF format...
+Tables  id  caption  rows
+  t1  Compression  Brotli^85%^Fast|Gzip^78%^Medium</code></pre>
+
+    <p>The ONTO format reduces token count by 60–80% compared to raw XML, making it the preferred export format for LLM-based document analysis pipelines where context window efficiency matters.</p>
+  </article>
+
+  <aside>
+    <h3>Implementation Notes</h3>
+    <p>The HTML converter uses the scraper crate (html5ever-based) for spec-compliant DOM parsing. This handles malformed HTML, implicit element closure, and Unicode normalization correctly — all critical for real-world document conversion where authors do not always produce well-formed markup.</p>
+  </aside>
+
+  <section>
+    <h2>Performance Benchmarks</h2>
+    <p>Measured on Apple M2 Pro, single-threaded, release build:</p>
+    <table>
+      <caption>Build Time vs. File Size (Minimal Render Mode)</caption>
+      <thead>
+        <tr>
+          <th>Input XML Size</th>
+          <th>Build Time</th>
+          <th>AIPDF Size</th>
+          <th>Overhead</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1 KB</td>
+          <td>2 ms</td>
+          <td>1,240 bytes</td>
+          <td>24%</td>
+        </tr>
+        <tr>
+          <td>10 KB</td>
+          <td>4 ms</td>
+          <td>7,800 bytes</td>
+          <td>8%</td>
+        </tr>
+        <tr>
+          <td>100 KB</td>
+          <td>18 ms</td>
+          <td>68,000 bytes</td>
+          <td>5%</td>
+        </tr>
+        <tr>
+          <td>1 MB</td>
+          <td>142 ms</td>
+          <td>620,000 bytes</td>
+          <td>3.8%</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div>
+    <h2>Conclusion</h2>
+    <p>The AIPDF format achieves its core design goal: a single file that serves both human readers via standard PDF rendering and AI systems via embedded structured XML. The semantic layer adds minimal overhead while enabling precise, OCR-free content extraction across all supported output formats.</p>
+
+    <p>The production-quality PDF renderer produces multi-page documents with styled headings, word-wrapped paragraphs, grid-based tables, syntax-highlighted code blocks, bulleted and numbered lists, citation sidebars, and footnote annotations — all using only base-14 PDF fonts with no external dependencies.</p>
+  </div>
+
+</body>
+</html>

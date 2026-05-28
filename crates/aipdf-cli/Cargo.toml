@@ -1,0 +1,15 @@
+[package]
+name = "aipdf-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI for minimal semantic .aipdf files"
+
+[[bin]]
+name = "aipdf"
+path = "src/main.rs"
+
+[dependencies]
+aipdf = { path = "../aipdf" }
+clap = { version = "4", features = ["derive"] }
+

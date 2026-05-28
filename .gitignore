@@ -1,0 +1,9 @@
+/target
+.venv/
+**/__pycache__/
+*.pyc
+node_modules/
+dist/
+*.aipdf
+!samples/*.aipdf
+.DS_Store
