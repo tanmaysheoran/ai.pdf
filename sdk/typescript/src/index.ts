@@ -1,13 +1,17 @@
 import { readFileSync } from "node:fs";
 import { brotliDecompressSync } from "node:zlib";
 
-const SEMANTIC_SUBTYPE = Buffer.from("/application#aipdf+xml+br");
+// Conformant PDF name for MIME application/aipdf+xml+br ('/' escaped as #2F).
+const SEMANTIC_SUBTYPE = Buffer.from("/application#2Faipdf+xml+br");
+// Kept in lockstep with the Rust core (security.rs) and Python SDK.
 const DISALLOWED_MARKERS = [
   "<!DOCTYPE",
   "<?xml-stylesheet",
+  "<?processing",
   "<script",
   "/JavaScript",
   "/Launch",
+  "prompt:",
   "system prompt",
   "model directive",
 ];
@@ -126,128 +130,242 @@ export function sanitizeXml(xml: string): string {
   return clean;
 }
 
-export function getReadingOrder(xml: string): SemanticBlock[] {
-  const out: SemanticBlock[] = [];
-  const tagPattern = /<(title|paragraph|caption|equation|citation|cell|item|codeBlock|reference|footnote|note)\b([^>]*)>([\s\S]*?)<\/\1>/g;
-  for (const match of sanitizeXml(xml).matchAll(tagPattern)) {
-    const attrs = parseAttrs(match[2]);
-    out.push({
-      kind: match[1],
-      id: attrs.id,
-      page: attrs.page ? Number(attrs.page) : undefined,
-      bbox: attrs.bbox,
-      text: stripTags(match[3]),
-    });
-  }
-  return out;
+// ---------------------------------------------------------------------------
+// Minimal but proper XML parser (replaces the previous regex-based consumer).
+// Produces a small DOM that the read-side transforms walk in document order —
+// robust to nesting, attribute quoting, CDATA, comments, and entities.
+// ---------------------------------------------------------------------------
+
+interface XmlNode {
+  tag: string; // element tag, or "#text" for text nodes
+  attrs: Record<string, string>;
+  children: XmlNode[];
+  value?: string; // text content for "#text" nodes
 }
 
-export function collectElementText(xml: string, element: string): string[] {
-  const escaped = element.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`<${escaped}\\b[^>]*>([\\s\\S]*?)<\\/${escaped}>`, "g");
-  return [...sanitizeXml(xml).matchAll(pattern)].map((m) => stripTags(m[1]));
-}
-
-export function xmlToMarkdown(xml: string): string {
-  const clean = sanitizeXml(xml);
-  const lines: string[] = [];
-  let level = 1;
-  // Extended token pattern handles: section, simple inline blocks, codeBlock,
-  // list, references, figure, definitionList, table
-  const tokenPattern =
-    /<section\b([^>]*)>|<(title|paragraph|citation|equation|note|footnote)\b[^>]*>([\s\S]*?)<\/\2>|<codeBlock\b([^>]*)>([\s\S]*?)<\/codeBlock>|<(list)\b([^>]*)>([\s\S]*?)<\/list>|<(references)\b[^>]*>([\s\S]*?)<\/references>|<(figure)\b([^>]*)>([\s\S]*?)<\/figure>|<(definitionList)\b[^>]*>([\s\S]*?)<\/definitionList>|<table\b[^>]*>([\s\S]*?)<\/table>/g;
-  for (const match of clean.matchAll(tokenPattern)) {
-    if (match[0].startsWith("<section")) {
-      // group 1: section attrs
-      level = Number(parseAttrs(match[1]).level ?? "1");
-    } else if (match[2]) {
-      // group 2: simple inline tag name; group 3: content
-      const tag = match[2];
-      const text = stripTags(match[3]);
-      if (tag === "title") {
-        lines.push(`${"#".repeat(Math.min(Math.max(level, 1), 6))} ${text}`, "");
-      } else if (tag === "paragraph") {
-        lines.push(text, "");
-      } else if (tag === "citation") {
-        lines.push(`> ${text}`, "");
-      } else if (tag === "equation") {
-        lines.push("```math", text, "```", "");
-      } else if (tag === "note") {
-        lines.push(`> Note: ${text}`, "");
-      } else if (tag === "footnote") {
-        // Use a sequential footnote label derived from current count
-        const idx = lines.filter((l) => l.startsWith("[^")).length + 1;
-        lines.push(`[^note${idx}]: ${text}`, "");
-      }
-    } else if (match[4] !== undefined) {
-      // group 4: codeBlock attrs; group 5: codeBlock content
-      const lang = parseAttrs(match[4]).language ?? "";
-      lines.push(`\`\`\`${lang}`, match[5].trim(), "```", "");
-    } else if (match[6] === "list") {
-      // group 7: list attrs; group 8: list body
-      const listAttrs = parseAttrs(match[7]);
-      const ordered = listAttrs.type === "ordered";
-      const items = [...match[8].matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/g)];
-      items.forEach((item, i) => {
-        const text = stripTags(item[1]);
-        lines.push(ordered ? `${i + 1}. ${text}` : `- ${text}`);
-      });
-      lines.push("");
-    } else if (match[9] === "references") {
-      // group 10: references body
-      const refs = [...match[10].matchAll(/<reference\b[^>]*>([\s\S]*?)<\/reference>/g)];
-      if (refs.length > 0) {
-        refs.forEach((ref) => lines.push(`- ${stripTags(ref[1])}`));
-        lines.push("");
-      }
-    } else if (match[11] === "figure") {
-      // group 12: figure attrs; group 13: figure body
-      const body = match[13];
-      const imgAttrs = parseAttrs((body.match(/<image\b([^>]*)\/?\s*>/) ?? ["", ""])[1]);
-      const captionText = stripTags((body.match(/<caption\b[^>]*>([\s\S]*?)<\/caption>/) ?? ["", ""])[1]);
-      const alt = imgAttrs.alt ?? "";
-      const src = imgAttrs.src ?? "";
-      lines.push(`![${alt}](${src})`, "");
-      if (captionText) lines.push(`_${captionText}_`, "");
-    } else if (match[14] === "definitionList") {
-      // group 15: definitionList body
-      const defs = [...match[15].matchAll(/<definition\b([^>]*)>([\s\S]*?)<\/definition>/g)];
-      defs.forEach((def) => {
-        const term = parseAttrs(def[1]).term ?? "";
-        const text = stripTags(def[2]);
-        lines.push(`- ${term}: ${text}`);
-      });
-      lines.push("");
-    } else {
-      // table: last capture group — use the full match content between <table> tags
-      const tableBody = match[0].replace(/^<table\b[^>]*>/, "").replace(/<\/table>$/, "");
-      lines.push(...tableToMarkdown(tableBody), "");
-    }
-  }
-  return lines.join("\n").trim();
-}
-
-function tableToMarkdown(xml: string): string[] {
-  const rows = [...xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)].map((row) =>
-    [...row[1].matchAll(/<cell\b[^>]*>([\s\S]*?)<\/cell>/g)].map((cell) => stripTags(cell[1])),
-  );
-  if (rows.length === 0) return [];
-  return [
-    `| ${rows[0].join(" | ")} |`,
-    `| ${rows[0].map(() => "---").join(" | ")} |`,
-    ...rows.slice(1).map((row) => `| ${row.join(" | ")} |`),
-  ];
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&amp;/g, "&");
 }
 
 function parseAttrs(attrs: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const match of attrs.matchAll(/([A-Za-z_:][A-Za-z0-9_.:-]*)=["']([^"']*)["']/g)) {
-    out[match[1]] = match[2];
+    out[match[1]] = decodeEntities(match[2]);
   }
   return out;
 }
 
+/** Parse XML into a DOM and return the root document element. */
+function parseXml(xml: string): XmlNode {
+  const root: XmlNode = { tag: "#root", attrs: {}, children: [] };
+  const stack: XmlNode[] = [root];
+  const top = () => stack[stack.length - 1];
+  let i = 0;
+  const n = xml.length;
+  while (i < n) {
+    if (xml[i] === "<") {
+      if (xml.startsWith("<!--", i)) {
+        const e = xml.indexOf("-->", i);
+        i = e < 0 ? n : e + 3;
+      } else if (xml.startsWith("<![CDATA[", i)) {
+        const e = xml.indexOf("]]>", i + 9);
+        top().children.push({ tag: "#text", attrs: {}, children: [], value: xml.slice(i + 9, e < 0 ? n : e) });
+        i = e < 0 ? n : e + 3;
+      } else if (xml.startsWith("<?", i)) {
+        const e = xml.indexOf("?>", i);
+        i = e < 0 ? n : e + 2;
+      } else if (xml.startsWith("<!", i)) {
+        const e = xml.indexOf(">", i);
+        i = e < 0 ? n : e + 1;
+      } else if (xml[i + 1] === "/") {
+        const e = xml.indexOf(">", i);
+        if (stack.length > 1) stack.pop();
+        i = e < 0 ? n : e + 1;
+      } else {
+        const e = xml.indexOf(">", i);
+        if (e < 0) break;
+        let inner = xml.slice(i + 1, e).trim();
+        const selfClose = inner.endsWith("/");
+        if (selfClose) inner = inner.slice(0, -1).trim();
+        const sp = inner.search(/\s/);
+        const tag = sp < 0 ? inner : inner.slice(0, sp);
+        const attrs = sp < 0 ? {} : parseAttrs(inner.slice(sp));
+        const node: XmlNode = { tag, attrs, children: [] };
+        top().children.push(node);
+        if (!selfClose) stack.push(node);
+        i = e + 1;
+      }
+    } else {
+      const e = xml.indexOf("<", i);
+      const raw = xml.slice(i, e < 0 ? n : e);
+      if (raw.length) top().children.push({ tag: "#text", attrs: {}, children: [], value: decodeEntities(raw) });
+      i = e < 0 ? n : e;
+    }
+  }
+  return root.children.find((c) => c.tag !== "#text") ?? root;
+}
+
+/** All descendant text, whitespace-normalised (matches Rust/Python text_of). */
+function textOf(node: XmlNode): string {
+  let acc = "";
+  const visit = (nd: XmlNode) => {
+    if (nd.tag === "#text") acc += nd.value ?? "";
+    else nd.children.forEach(visit);
+  };
+  visit(node);
+  return acc.replace(/\s+/g, " ").trim();
+}
+
+function elementChildren(node: XmlNode): XmlNode[] {
+  return node.children.filter((c) => c.tag !== "#text");
+}
+
+function findChild(node: XmlNode, tag: string): XmlNode | undefined {
+  return node.children.find((c) => c.tag === tag);
+}
+
+/** Pre-order iteration over every element node (self included). */
+function* iterElements(node: XmlNode): Generator<XmlNode> {
+  if (node.tag !== "#text" && node.tag !== "#root") yield node;
+  for (const c of node.children) if (c.tag !== "#text") yield* iterElements(c);
+}
+
+const READING_ORDER_KINDS = new Set([
+  "title", "paragraph", "caption", "equation", "citation", "cell",
+  "item", "codeBlock", "reference", "footnote", "note",
+]);
+
+export function getReadingOrder(xml: string): SemanticBlock[] {
+  const root = parseXml(sanitizeXml(xml));
+  const out: SemanticBlock[] = [];
+  for (const el of iterElements(root)) {
+    if (READING_ORDER_KINDS.has(el.tag)) {
+      out.push({
+        kind: el.tag,
+        id: el.attrs.id,
+        page: el.attrs.page ? Number(el.attrs.page) : undefined,
+        bbox: el.attrs.bbox,
+        text: textOf(el),
+      });
+    }
+  }
+  return out;
+}
+
+export function collectElementText(xml: string, element: string): string[] {
+  const root = parseXml(sanitizeXml(xml));
+  const out: string[] = [];
+  for (const el of iterElements(root)) if (el.tag === element) out.push(textOf(el));
+  return out;
+}
+
+export function xmlToMarkdown(xml: string): string {
+  const root = parseXml(sanitizeXml(xml));
+  const lines: string[] = [];
+  renderChildren(root, lines, 1);
+  return lines.join("\n").trim();
+}
+
+function renderChildren(elem: XmlNode, lines: string[], level: number): void {
+  for (const child of elementChildren(elem)) {
+    switch (child.tag) {
+      case "section":
+      case "appendix": {
+        const childLevel = Number(child.attrs.level ?? level) || level;
+        renderChildren(child, lines, childLevel);
+        break;
+      }
+      case "title":
+        lines.push(`${"#".repeat(Math.min(Math.max(level, 1), 6))} ${textOf(child)}`, "");
+        break;
+      case "paragraph":
+        lines.push(textOf(child), "");
+        break;
+      case "citation":
+        lines.push(`> ${textOf(child)}`, "");
+        break;
+      case "equation":
+        lines.push("```math", textOf(child), "```", "");
+        break;
+      case "table":
+        renderTable(child, lines);
+        break;
+      case "list": {
+        const ordered = child.attrs.type === "ordered";
+        elementChildren(child)
+          .filter((c) => c.tag === "item")
+          .forEach((item, i) => lines.push(ordered ? `${i + 1}. ${textOf(item)}` : `- ${textOf(item)}`));
+        lines.push("");
+        break;
+      }
+      case "codeBlock": {
+        const lang = child.attrs.language ?? "";
+        lines.push(`\`\`\`${lang}`, textOf(child), "```", "");
+        break;
+      }
+      case "note":
+        lines.push(`> Note: ${textOf(child)}`, "");
+        break;
+      case "footnote":
+        lines.push(`[^note]: ${textOf(child)}`, "");
+        break;
+      case "references":
+        for (const ref of elementChildren(child)) if (ref.tag === "reference") lines.push(`- ${textOf(ref)}`);
+        lines.push("");
+        break;
+      case "figure": {
+        const image = findChild(child, "image");
+        const alt = child.attrs.alt || image?.attrs.alt || "";
+        const src = image?.attrs.src ?? "";
+        const cap = findChild(child, "caption");
+        lines.push(`![${alt}](${src})`, "");
+        if (cap) lines.push(`_${textOf(cap)}_`, "");
+        break;
+      }
+      case "definitionList":
+        for (const defn of elementChildren(child))
+          if (defn.tag === "definition") lines.push(`- ${defn.attrs.term ?? ""}: ${textOf(defn)}`);
+        lines.push("");
+        break;
+      default:
+        renderChildren(child, lines, level);
+    }
+  }
+}
+
+function renderTable(table: XmlNode, lines: string[]): void {
+  const cap = findChild(table, "caption");
+  if (cap) {
+    const text = textOf(cap);
+    if (text) lines.push(`_${text}_`, "");
+  }
+  const rows: string[][] = [];
+  const collectRows = (parent: XmlNode) => {
+    for (const row of elementChildren(parent)) {
+      if (row.tag === "row") rows.push(elementChildren(row).filter((c) => c.tag === "cell").map(textOf));
+    }
+  };
+  const thead = findChild(table, "thead");
+  if (thead) collectRows(thead);
+  const tbody = findChild(table, "tbody");
+  if (tbody) collectRows(tbody);
+  collectRows(table);
+  if (rows.length === 0) return;
+  lines.push(`| ${rows[0].join(" | ")} |`);
+  lines.push(`| ${rows[0].map(() => "---").join(" | ")} |`);
+  for (const row of rows.slice(1)) lines.push(`| ${row.join(" | ")} |`);
+  lines.push("");
+}
+
 function stripTags(input: string): string {
+  // Retained for the source-side HTML converter below.
   return input
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/<[^>]+>/g, " ")
@@ -258,99 +376,110 @@ function stripTags(input: string): string {
     .trim();
 }
 
+const ONTO_BLOCK_KINDS = new Set([
+  "title", "paragraph", "caption", "equation", "citation", "item",
+  "note", "footnote", "definition", "codeBlock", "annotation",
+]);
+
+interface OntoSection {
+  id: string;
+  level: string;
+  page: string;
+  role: string;
+  title: string;
+}
+
 export function xmlToOnto(xml: string): string {
-  const clean = sanitizeXml(xml);
-  const version = parseAttrs((clean.match(/<document\b([^>]*)>/) ?? ["", ""])[1]).version ?? "";
-  const metadata = (clean.match(/<metadata\b[^>]*>([\s\S]*?)<\/metadata>/) ?? ["", ""])[1];
-  const title = stripTags((metadata.match(/<title\b[^>]*>([\s\S]*?)<\/title>/) ?? ["", ""])[1]);
-  const sections: Record<string, string>[] = [];
+  const root = parseXml(sanitizeXml(xml));
+  const version = root.attrs.version ?? "";
+  const metaTitleEl = findChild(root, "metadata") && findChild(findChild(root, "metadata")!, "title");
+  const docTitle = metaTitleEl ? textOf(metaTitleEl) : "";
+
+  const sections: OntoSection[] = [];
   const blocks: Record<string, string>[] = [];
-  const tables: Record<string, string>[] = [];
+  const tables: { id: string; page: string; bbox: string; caption: string; rows: string[][] }[] = [];
   const figures: Record<string, string>[] = [];
   const references: Record<string, string>[] = [];
 
-  for (const sectionMatch of clean.matchAll(/<(section|appendix)\b([^>]*)>([\s\S]*?)<\/\1>/g)) {
-    const tag = sectionMatch[1];
-    const attrs = parseAttrs(sectionMatch[2]);
-    const body = sectionMatch[3];
-    const section = {
-      id: attrs.id ?? "",
-      level: attrs.level ?? (tag === "appendix" ? "appendix" : ""),
-      page: attrs.page ?? attrs.pageStart ?? "",
-      role: attrs.role ?? attrs.semanticRole ?? (tag === "appendix" ? "appendix" : ""),
-      title: "",
-    };
-    sections.push(section);
-    for (const blockMatch of body.matchAll(/<(title|paragraph|caption|equation|citation|item|note|footnote|definition|codeBlock|annotation)\b([^>]*)>([\s\S]*?)<\/\1>/g)) {
-      const kind = blockMatch[1];
-      if ((kind === "caption" && /<table\b[\s\S]*<caption\b/.test(body.slice(0, blockMatch.index ?? 0))) || kind === "caption") {
-        // Captions are exported with their table/figure record when possible.
-        const before = body.slice(0, blockMatch.index ?? 0);
-        const after = body.slice(blockMatch.index ?? 0);
-        if (before.lastIndexOf("<table") > before.lastIndexOf("</table>") || before.lastIndexOf("<figure") > before.lastIndexOf("</figure>")) continue;
-        if (/^<caption\b[\s\S]*?<\/caption>\s*<\/(table|figure)>/.test(after)) continue;
-      }
-      const attrs = parseAttrs(blockMatch[2]);
-      let text = stripTags(blockMatch[3]);
-      if (kind === "definition" && attrs.term) text = `${attrs.term}: ${text}`;
-      if (kind === "title" && !section.title) section.title = text;
-      blocks.push({
-        id: attrs.id ?? "",
-        kind,
-        section_id: section.id,
-        level: section.level,
-        page: attrs.page ?? section.page,
-        bbox: attrs.bbox ?? "",
-        role: attrs.role ?? defaultOntoRole(kind),
-        text,
+  const walk = (node: XmlNode, section: OntoSection | null, inMetadata: boolean) => {
+    const tag = node.tag;
+    let current = section;
+    if (tag === "section" || tag === "appendix") {
+      current = {
+        id: node.attrs.id ?? "",
+        level: node.attrs.level ?? (tag === "appendix" ? "appendix" : ""),
+        page: node.attrs.page ?? node.attrs.pageStart ?? "",
+        role: node.attrs.role ?? node.attrs.semanticRole ?? (tag === "appendix" ? "appendix" : ""),
+        title: "",
+      };
+      sections.push(current);
+    } else if (tag === "metadata") {
+      inMetadata = true;
+    } else if (tag === "table") {
+      tables.push({
+        id: node.attrs.id ?? "",
+        page: node.attrs.page ?? "",
+        bbox: node.attrs.bbox ?? "",
+        caption: (() => { const c = findChild(node, "caption"); return c ? textOf(c) : ""; })(),
+        rows: elementChildren(node)
+          .filter((r) => r.tag === "row")
+          .map((r) => elementChildren(r).filter((c) => c.tag === "cell").map(textOf)),
       });
+      return; // captions/cells belong to the table record, not the block list
+    } else if (tag === "figure") {
+      const image = findChild(node, "image");
+      const cap = findChild(node, "caption");
+      figures.push({
+        id: node.attrs.id ?? "",
+        page: node.attrs.page ?? "",
+        bbox: node.attrs.bbox ?? "",
+        caption: cap ? textOf(cap) : "",
+        alt: image?.attrs.alt ?? "",
+        source: node.attrs.source ?? image?.attrs.src ?? "",
+      });
+      return;
+    } else if (tag === "reference") {
+      references.push({ id: node.attrs.id ?? "", type: node.attrs.type ?? "", text: textOf(node) });
+      return;
+    } else if (ONTO_BLOCK_KINDS.has(tag)) {
+      if (current && !inMetadata) {
+        let text = textOf(node);
+        if (tag === "definition" && node.attrs.term) text = `${node.attrs.term}: ${text}`;
+        if (tag === "title" && !current.title) current.title = text;
+        blocks.push({
+          id: node.attrs.id ?? "",
+          kind: tag,
+          section_id: current.id,
+          level: current.level,
+          page: node.attrs.page ?? current.page,
+          bbox: node.attrs.bbox ?? "",
+          role: node.attrs.role ?? defaultOntoRole(tag),
+          text,
+        });
+      }
     }
-  }
-
-  for (const tableMatch of clean.matchAll(/<table\b([^>]*)>([\s\S]*?)<\/table>/g)) {
-    const attrs = parseAttrs(tableMatch[1]);
-    const body = tableMatch[2];
-    const rows = [...body.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)]
-      .map((row) => [...row[1].matchAll(/<cell\b[^>]*>([\s\S]*?)<\/cell>/g)].map((cell) => ontoArrayScalar(stripTags(cell[1]))).join("^"))
-      .join("|");
-    tables.push({
-      id: attrs.id ?? "",
-      page: attrs.page ?? "",
-      bbox: attrs.bbox ?? "",
-      caption: stripTags((body.match(/<caption\b[^>]*>([\s\S]*?)<\/caption>/) ?? ["", ""])[1]),
-      rows,
-    });
-  }
-
-  for (const figureMatch of clean.matchAll(/<figure\b([^>]*)>([\s\S]*?)<\/figure>/g)) {
-    const attrs = parseAttrs(figureMatch[1]);
-    const body = figureMatch[2];
-    const imageAttrs = parseAttrs((body.match(/<image\b([^>]*)\/?\s*>/) ?? ["", ""])[1]);
-    figures.push({
-      id: attrs.id ?? "",
-      page: attrs.page ?? "",
-      bbox: attrs.bbox ?? "",
-      caption: stripTags((body.match(/<caption\b[^>]*>([\s\S]*?)<\/caption>/) ?? ["", ""])[1]),
-      alt: imageAttrs.alt ?? "",
-      source: attrs.source ?? imageAttrs.src ?? "",
-    });
-  }
-
-  for (const refMatch of clean.matchAll(/<reference\b([^>]*)>([\s\S]*?)<\/reference>/g)) {
-    const attrs = parseAttrs(refMatch[1]);
-    references.push({ id: attrs.id ?? "", type: attrs.type ?? "", text: stripTags(refMatch[2]) });
-  }
+    for (const child of elementChildren(node)) walk(child, current, inMetadata);
+  };
+  walk(root, null, false);
 
   const lines = ["Document[1]:"];
   ontoField(lines, "version", version);
-  ontoField(lines, "title", title);
+  ontoField(lines, "title", docTitle);
   ontoField(lines, "source_format", "aipdf.semantic.xml");
   lines.push("");
-  ontoColumns(lines, "Sections", sections, ["id", "level", "page", "role", "title"]);
+  ontoColumns(lines, "Sections", sections as unknown as Record<string, string>[], ["id", "level", "page", "role", "title"]);
   lines.push("");
   ontoColumns(lines, "Blocks", blocks, ["id", "kind", "section_id", "level", "page", "bbox", "role", "text"]);
   lines.push("");
-  ontoColumns(lines, "Tables", tables, ["id", "page", "bbox", "caption", "rows"]);
+  const tableRecords = tables.map((t) => ({
+    id: t.id,
+    page: t.page,
+    bbox: t.bbox,
+    caption: t.caption,
+    // Pre-serialised with raw ^ / | delimiters; emitted via rawFields below.
+    rows: t.rows.map((row) => row.map(ontoArrayScalar).join("^")).join("|"),
+  }));
+  ontoColumns(lines, "Tables", tableRecords, ["id", "page", "bbox", "caption", "rows"], new Set(["rows"]));
   lines.push("");
   ontoColumns(lines, "Figures", figures, ["id", "page", "bbox", "caption", "alt", "source"]);
   lines.push("");
@@ -358,9 +487,20 @@ export function xmlToOnto(xml: string): string {
   return lines.join("\n").trimEnd();
 }
 
-function ontoColumns(lines: string[], name: string, records: Record<string, string>[], fields: string[]): void {
+function ontoColumns(
+  lines: string[],
+  name: string,
+  records: Record<string, string>[],
+  fields: string[],
+  rawFields: Set<string> = new Set(),
+): void {
   lines.push(`${name}[${records.length}]:`);
-  for (const field of fields) lines.push(`    ${field}: ${records.map((record) => ontoScalar(record[field] ?? "")).join("|")}`);
+  for (const field of fields) {
+    const cells = records.map((record) =>
+      rawFields.has(field) ? String(record[field] ?? "") : ontoScalar(record[field] ?? ""),
+    );
+    lines.push(`    ${field}: ${cells.join("|")}`);
+  }
 }
 
 function ontoField(lines: string[], name: string, value: string): void {

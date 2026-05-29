@@ -48,6 +48,9 @@ pub fn xml_to_markdown(xml: &str) -> String {
     let mut in_cell = false;
     let mut table_rows: Vec<Vec<String>> = Vec::new();
     let mut current_row: Vec<String> = Vec::new();
+    let mut list_ordered = false;
+    let mut list_index = 0usize;
+    let mut code_lang: Option<String> = None;
 
     loop {
         match reader.read_event() {
@@ -82,7 +85,21 @@ pub fn xml_to_markdown(xml: &str) -> String {
                 }
                 b"codeBlock" => {
                     current.clear();
+                    code_lang = e
+                        .attributes()
+                        .flatten()
+                        .find(|a| a.key.as_ref() == b"language")
+                        .map(|a| String::from_utf8_lossy(a.value.as_ref()).to_string());
                     in_code = true;
+                }
+                b"list" => {
+                    list_ordered = e
+                        .attributes()
+                        .flatten()
+                        .find(|a| a.key.as_ref() == b"type")
+                        .map(|a| a.value.as_ref() == b"ordered")
+                        .unwrap_or(false);
+                    list_index = 0;
                 }
                 b"item" => {
                     current.clear();
@@ -147,6 +164,18 @@ pub fn xml_to_markdown(xml: &str) -> String {
                     current.push_str(String::from_utf8_lossy(&t).trim());
                 }
             }
+            Ok(Event::Empty(e)) => {
+                if e.name().as_ref() == b"image" {
+                    let attr = |k: &[u8]| {
+                        e.attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == k)
+                            .map(|a| String::from_utf8_lossy(a.value.as_ref()).to_string())
+                            .unwrap_or_default()
+                    };
+                    out.push_str(&format!("![{}]({})\n\n", attr(b"alt"), attr(b"src")));
+                }
+            }
             Ok(Event::End(e)) => match e.name().as_ref() {
                 b"title" if in_title => {
                     out.push_str(&format!(
@@ -181,13 +210,21 @@ pub fn xml_to_markdown(xml: &str) -> String {
                 }
                 b"codeBlock" if in_code => {
                     out.push_str("```");
+                    if let Some(lang) = code_lang.take() {
+                        out.push_str(&lang);
+                    }
                     out.push('\n');
                     out.push_str(current.trim());
                     out.push_str("\n```\n\n");
                     in_code = false;
                 }
                 b"item" if in_item => {
-                    out.push_str("- ");
+                    if list_ordered {
+                        list_index += 1;
+                        out.push_str(&format!("{list_index}. "));
+                    } else {
+                        out.push_str("- ");
+                    }
                     out.push_str(current.trim());
                     out.push('\n');
                     in_item = false;
