@@ -21,6 +21,10 @@ struct MarkdownNode {
     lang: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ordered: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    alt: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     children: Vec<MarkdownNode>,
 }
@@ -376,6 +380,17 @@ fn xml_to_markdown_ast(xml: &str) -> MarkdownAst {
                     current.push_str(String::from_utf8_lossy(&t).trim());
                 }
             }
+            Ok(Event::Empty(e)) => {
+                // `<image src=… alt=…/>` is self-closing, so it arrives as Empty.
+                // Emit it as an MDAST image node (wrapped in a paragraph). The
+                // figure's `<caption>` is still captured separately as its own
+                // paragraph by the End handler below.
+                if e.name().as_ref() == b"image" {
+                    let src = attr_value(&e, b"src").unwrap_or_default();
+                    let alt = attr_value(&e, b"alt").unwrap_or_default();
+                    children.push(image_paragraph_node(&src, &alt));
+                }
+            }
             Ok(Event::End(e)) => match e.name().as_ref() {
                 b"title" if capture == Some("heading") => {
                     children.push(heading_node(section_level, current.trim()));
@@ -408,6 +423,8 @@ fn xml_to_markdown_ast(xml: &str) -> MarkdownAst {
                 b"footnote" if capture == Some("footnote") => {
                     children.push(MarkdownNode {
                         node_type: "footnoteDefinition",
+                        url: None,
+                        alt: None,
                         value: None,
                         depth: None,
                         lang: None,
@@ -436,6 +453,8 @@ fn xml_to_markdown_ast(xml: &str) -> MarkdownAst {
                 b"list" | b"references" | b"definitionList" if in_list => {
                     children.push(MarkdownNode {
                         node_type: "list",
+                        url: None,
+                        alt: None,
                         value: None,
                         depth: None,
                         lang: None,
@@ -477,6 +496,8 @@ fn start_capture(current: &mut String, capture: &mut Option<&'static str>, kind:
 fn heading_node(depth: usize, value: &str) -> MarkdownNode {
     MarkdownNode {
         node_type: "heading",
+        url: None,
+        alt: None,
         value: None,
         depth: Some(depth.clamp(1, 6)),
         lang: None,
@@ -488,6 +509,8 @@ fn heading_node(depth: usize, value: &str) -> MarkdownNode {
 fn paragraph_node(value: &str) -> MarkdownNode {
     MarkdownNode {
         node_type: "paragraph",
+        url: None,
+        alt: None,
         value: None,
         depth: None,
         lang: None,
@@ -496,9 +519,36 @@ fn paragraph_node(value: &str) -> MarkdownNode {
     }
 }
 
+/// An MDAST `image` node wrapped in a `paragraph` — images are phrasing content
+/// and may not sit at the document root, so they live inside a block.
+fn image_paragraph_node(src: &str, alt: &str) -> MarkdownNode {
+    let image = MarkdownNode {
+        node_type: "image",
+        value: None,
+        depth: None,
+        lang: None,
+        ordered: None,
+        url: Some(src.to_string()),
+        alt: Some(alt.to_string()),
+        children: Vec::new(),
+    };
+    MarkdownNode {
+        node_type: "paragraph",
+        value: None,
+        depth: None,
+        lang: None,
+        ordered: None,
+        url: None,
+        alt: None,
+        children: vec![image],
+    }
+}
+
 fn blockquote_node(value: &str) -> MarkdownNode {
     MarkdownNode {
         node_type: "blockquote",
+        url: None,
+        alt: None,
         value: None,
         depth: None,
         lang: None,
@@ -510,6 +560,8 @@ fn blockquote_node(value: &str) -> MarkdownNode {
 fn list_item_node(value: &str) -> MarkdownNode {
     MarkdownNode {
         node_type: "listItem",
+        url: None,
+        alt: None,
         value: None,
         depth: None,
         lang: None,
@@ -521,6 +573,8 @@ fn list_item_node(value: &str) -> MarkdownNode {
 fn table_node(rows: &[Vec<String>]) -> MarkdownNode {
     MarkdownNode {
         node_type: "table",
+        url: None,
+        alt: None,
         value: None,
         depth: None,
         lang: None,
@@ -529,6 +583,8 @@ fn table_node(rows: &[Vec<String>]) -> MarkdownNode {
             .iter()
             .map(|row| MarkdownNode {
                 node_type: "tableRow",
+                url: None,
+                alt: None,
                 value: None,
                 depth: None,
                 lang: None,
@@ -537,6 +593,8 @@ fn table_node(rows: &[Vec<String>]) -> MarkdownNode {
                     .iter()
                     .map(|cell| MarkdownNode {
                         node_type: "tableCell",
+                        url: None,
+                        alt: None,
                         value: None,
                         depth: None,
                         lang: None,
@@ -556,6 +614,8 @@ fn value_node(node_type: &'static str, value: &str, lang: Option<String>) -> Mar
         depth: None,
         lang,
         ordered: None,
+        url: None,
+        alt: None,
         children: Vec::new(),
     }
 }

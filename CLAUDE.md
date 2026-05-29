@@ -37,7 +37,6 @@ cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format xml
 cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format markdown
 cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format markdown-ast
 cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format onto
-cargo run -p aipdf-cli -- export samples/maximal.ai.pdf --format onto
 ```
 
 ### Python SDK
