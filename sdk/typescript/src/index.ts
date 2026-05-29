@@ -3,7 +3,10 @@ import { brotliDecompressSync } from "node:zlib";
 
 // Conformant PDF name for MIME application/aipdf+xml+br ('/' escaped as #2F).
 const SEMANTIC_SUBTYPE = Buffer.from("/application#2Faipdf+xml+br");
-// Kept in lockstep with the Rust core (security.rs) and Python SDK.
+// Active-content / structural markers only. Kept in lockstep with the Rust core
+// (security.rs) and Python SDK. Natural-language phrases are intentionally NOT
+// banned: XML text is data, never instructions, and the visible PDF already
+// carries the same words.
 const DISALLOWED_MARKERS = [
   "<!DOCTYPE",
   "<?xml-stylesheet",
@@ -11,9 +14,6 @@ const DISALLOWED_MARKERS = [
   "<script",
   "/JavaScript",
   "/Launch",
-  "prompt:",
-  "system prompt",
-  "model directive",
 ];
 
 export interface SemanticBlock {

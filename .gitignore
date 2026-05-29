@@ -6,5 +6,7 @@ node_modules/
 dist/
 *.aipdf
 !samples/*.aipdf
+# Generated .ai.pdf outputs (committed samples/*.pdf fixtures are still tracked).
+*.ai.pdf
 .DS_Store
 .claude/*

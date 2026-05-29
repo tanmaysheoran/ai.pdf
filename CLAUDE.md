@@ -162,8 +162,9 @@ Existing PDF
 ### Security invariants
 
 - `sanitize_xml` runs on every XML path (both build and extract).
-- Disallowed strings: `<!DOCTYPE`, `<?xml-stylesheet`, `<?processing`, `<script`, `/JavaScript`, `/Launch`, `prompt:`, `system prompt`, `model directive` (the same list in the Rust core, Python SDK, and TS SDK).
-- The semantic layer deliberately stores no embeddings, prompts, model output, or executable content.
+- Disallowed **active-content / structural** markers only: `<!DOCTYPE`, `<?xml-stylesheet`, `<?processing`, `<script`, `/JavaScript`, `/Launch` (the same list in the Rust core, Python SDK, and TS SDK). Body text is XML-escaped, so these match only real markup.
+- Natural-language phrases (`system prompt`, `prompt:`, `model directive`) are intentionally **not** banned — XML text is data, not instructions, and the visible PDF already carries the same words. Banning them broke legitimate documents and PDF ingestion (e.g. `ingest` of a PDF discussing prompts); see `docs/security.md`.
+- The semantic layer deliberately stores no embeddings, model output, or executable content.
 - Decompressed payload capped at 16 MiB.
 
 ### ONTO export format

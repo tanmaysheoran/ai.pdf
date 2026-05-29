@@ -11,9 +11,18 @@ Attackers may try to hide instructions, executable content, oversized payloads, 
 - The semantic payload is XML validated against `aipdf-1.0.xsd`.
 - Parsers reject `DOCTYPE` and processing instructions.
 - Parsers never resolve external entities.
+- `sanitize_xml` rejects active-content / structural markers as **markup**:
+  `<!DOCTYPE`, `<?xml-stylesheet`, `<?processing`, `<script`, `/JavaScript`,
+  `/Launch`. Because body text is XML-escaped, these only trip on real markup,
+  not on prose that happens to mention them.
 - The embedded file name is fixed to `aipdf-semantic.xml.br`.
 - The embedded MIME marker is fixed to `application/aipdf+xml+br`.
-- XML text is not interpreted as prompts or instructions.
+- XML text is **data, not instructions**. Natural-language phrases (e.g.
+  "system prompt", "prompt:", "model directive") are *not* banned: the visible
+  PDF layer already carries the same words, and banning them would reject
+  legitimate documents (AI papers, or ingesting any PDF that discusses
+  prompting) for no security benefit. Consumers must treat the semantic layer
+  as data and never execute it as instructions.
 - No JavaScript, launch actions, multimedia actions, or executable attachments are part of the V1 profile.
 - Implementations should cap decompressed XML size. The Rust prototype defaults to 16 MiB.
 

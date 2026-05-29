@@ -17,7 +17,10 @@ except ImportError as exc:  # pragma: no cover
 # Conformant PDF name for MIME application/aipdf+xml+br ('/' escaped as #2F).
 SEMANTIC_SUBTYPE = b"/application#2Faipdf+xml+br"
 SEMANTIC_FILENAME = "aipdf-semantic.xml.br"
-# Kept in lockstep with the Rust core (security.rs) and TypeScript SDK.
+# Active-content / structural markers only. Kept in lockstep with the Rust core
+# (security.rs) and TypeScript SDK. Natural-language phrases are intentionally
+# NOT banned: XML text is data, never instructions, and the visible PDF already
+# carries the same words.
 DISALLOWED_MARKERS = (
     "<!DOCTYPE",
     "<?xml-stylesheet",
@@ -25,9 +28,6 @@ DISALLOWED_MARKERS = (
     "<script",
     "/JavaScript",
     "/Launch",
-    "prompt:",
-    "system prompt",
-    "model directive",
 )
 
 

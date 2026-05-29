@@ -229,7 +229,8 @@ No runtime dependencies. Uses Node's built-in `zlib` for Brotli and a small buil
 The semantic layer is **data, not behavior**.
 
 - Every XML path runs through `sanitize_xml` before use (both on build and on extract), with the same rejected-marker list across the Rust core and both SDKs.
-- Rejected strings: `<!DOCTYPE`, `<?xml-stylesheet`, `<?processing`, `<script`, `/JavaScript`, `/Launch`, `prompt:`, `system prompt`, `model directive`.
+- Rejected **active-content / structural** markers: `<!DOCTYPE`, `<?xml-stylesheet`, `<?processing`, `<script`, `/JavaScript`, `/Launch`. (Body text is XML-escaped, so these only match real markup.)
+- Natural-language phrases are **not** banned — XML text is data, not instructions, and the visible PDF already carries the same words. Consumers must treat the semantic layer as data.
 - No external entity resolution.
 - Decompressed payload capped at 16 MiB.
 - The embedded filename is fixed to `aipdf-semantic.xml.br`.
