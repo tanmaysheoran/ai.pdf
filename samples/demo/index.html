@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>The Long Way Round — A Travel Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Page geometry (this is a PDF, not a site) ───────────────────── */
+    @page {
+      size: A4;
+      margin: 18mm 16mm 20mm;
+    }
+    @page :first { margin: 0; }
+
+    :root {
+      --ink:        #1a1714;
+      --ink-soft:   #4a423b;
+      --ink-faint:  #8a8078;
+      --paper:      #ffffff;
+      --paper-warm: #f4eee4;
+      --line:       #ddd2c2;
+      --accent:     #b3471f;   /* lantern red-orange */
+      --gold:       #b8893b;
+      --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+      --sans:  "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 11pt; }
+
+    body {
+      font-family: var(--sans);
+      line-height: 1.6;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    img { display: block; max-width: 100%; }
+
+    /* ── Cover page (full bleed, fills the first sheet) ──────────────── */
+    .cover {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      color: #f6f2ea;
+      overflow: hidden;
+      page-break-after: always;
+    }
+    .cover img.bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .cover .scrim {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top,
+        rgba(8,10,14,0.92) 0%,
+        rgba(8,10,14,0.30) 52%,
+        rgba(8,10,14,0.50) 100%);
+    }
+    .cover .masthead {
+      position: absolute;
+      top: 18mm;
+      left: 18mm;
+      right: 18mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-family: var(--sans);
+      font-size: 9pt;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+    .cover .masthead .logo {
+      font-family: var(--serif);
+      font-weight: 900;
+      font-size: 13pt;
+      letter-spacing: 0.01em;
+    }
+    .cover .masthead .logo span { color: var(--accent); }
+    .cover .cover-text {
+      position: absolute;
+      left: 18mm;
+      right: 18mm;
+      bottom: 24mm;
+    }
+    .cover .kicker {
+      display: inline-block;
+      font-size: 9pt;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      border-top: 2px solid var(--accent);
+      padding-top: 0.6rem;
+      margin-bottom: 1.1rem;
+    }
+    .cover h1 {
+      font-family: var(--serif);
+      font-weight: 900;
+      font-size: 46pt;
+      line-height: 0.98;
+      letter-spacing: -0.03em;
+      max-width: 15ch;
+      text-shadow: 0 2px 30px rgba(0,0,0,0.35);
+    }
+    .cover .dek {
+      font-family: var(--serif);
+      font-style: italic;
+      font-size: 15pt;
+      line-height: 1.45;
+      max-width: 44ch;
+      margin-top: 1.1rem;
+      color: #eadfce;
+    }
+    .cover .byline {
+      margin-top: 1.6rem;
+      font-size: 9pt;
+      letter-spacing: 0.06em;
+      color: #d8cdba;
+    }
+    .cover .byline strong { color: #fff; font-weight: 600; }
+
+    /* ── Article body ────────────────────────────────────────────────── */
+    .lede {
+      font-family: var(--serif);
+      font-size: 14pt;
+      line-height: 1.5;
+      color: var(--ink);
+      margin-bottom: 1.4rem;
+    }
+    .lede::first-letter {
+      font-weight: 900;
+      font-size: 46pt;
+      line-height: 0.78;
+      float: left;
+      padding: 4px 8px 0 0;
+      color: var(--accent);
+    }
+
+    p { margin: 0 0 0.9rem; color: var(--ink-soft); }
+
+    /* ── Section headings ────────────────────────────────────────────── */
+    .section-head { margin: 1.8rem 0 0.9rem; page-break-after: avoid; }
+    .section-head .num {
+      font-size: 8.5pt;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .section-head h2 {
+      font-family: var(--serif);
+      font-weight: 700;
+      font-size: 22pt;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin-top: 0.25rem;
+    }
+    h3 {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: 14pt;
+      color: var(--ink);
+      margin: 1.4rem 0 0.5rem;
+      page-break-after: avoid;
+    }
+
+    /* ── Pull quote ──────────────────────────────────────────────────── */
+    .pullquote {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 16pt;
+      line-height: 1.35;
+      color: var(--ink);
+      border-left: 3px solid var(--accent);
+      padding: 0.2rem 0 0.2rem 1.2rem;
+      margin: 1.6rem 0;
+      page-break-inside: avoid;
+    }
+    .pullquote footer {
+      font-family: var(--sans);
+      font-size: 9pt;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--ink-faint);
+      margin-top: 0.7rem;
+      font-style: normal;
+    }
+
+    /* ── Figures ─────────────────────────────────────────────────────── */
+    figure { margin: 1.4rem 0; page-break-inside: avoid; }
+    figure img { width: 100%; border-radius: 3px; }
+    figcaption {
+      font-size: 8.5pt;
+      line-height: 1.5;
+      color: var(--ink-faint);
+      margin-top: 0.5rem;
+      padding-left: 0.7rem;
+      border-left: 2px solid var(--line);
+    }
+    figcaption b { color: var(--ink-soft); font-weight: 600; }
+
+    /* full-width figure that breaks to its own area */
+    figure.wide { margin: 1.6rem 0; }
+    figure.wide img { max-height: 120mm; object-fit: cover; }
+
+    /* ── Two-up image grid ───────────────────────────────────────────── */
+    .duo {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4mm;
+      margin: 1.4rem 0;
+      page-break-inside: avoid;
+    }
+    .duo img { width: 100%; height: 62mm; object-fit: cover; border-radius: 3px; }
+
+    /* ── Stats strip ─────────────────────────────────────────────────── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 1.8rem 0;
+      page-break-inside: avoid;
+    }
+    .stat { background: var(--paper-warm); padding: 1rem 0.6rem; text-align: center; }
+    .stat .big {
+      font-family: var(--serif);
+      font-weight: 900;
+      font-size: 22pt;
+      line-height: 1;
+      color: var(--accent);
+    }
+    .stat .lbl {
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      margin-top: 0.45rem;
+    }
+
+    /* ── Itinerary table ─────────────────────────────────────────────── */
+    .table-wrap { margin: 1.6rem 0; page-break-inside: avoid; }
+    .table-wrap .cap {
+      font-size: 8.5pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.7rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th {
+      background: var(--paper-warm);
+      text-align: left;
+      font-size: 7.5pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      padding: 0.6rem 0.85rem;
+      border-bottom: 1px solid var(--line);
+    }
+    td {
+      padding: 0.55rem 0.85rem;
+      border-bottom: 1px solid var(--paper-warm);
+      color: var(--ink-soft);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    td .day { font-family: var(--serif); font-weight: 700; color: var(--accent); }
+
+    /* ── Tip box ─────────────────────────────────────────────────────── */
+    aside.tip {
+      background: var(--paper-warm);
+      border-left: 3px solid var(--gold);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.2rem;
+      margin: 1.6rem 0;
+      page-break-inside: avoid;
+    }
+    aside.tip h4 {
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.4rem;
+    }
+    aside.tip p { font-size: 10pt; margin: 0; color: var(--ink-soft); }
+
+    .dots { text-align: center; margin: 1.8rem 0; color: var(--ink-faint); letter-spacing: 0.8rem; }
+
+    /* ── Colophon (closing block) ────────────────────────────────────── */
+    .colophon {
+      margin-top: 2.2rem;
+      padding-top: 1.2rem;
+      border-top: 1px solid var(--line);
+      font-size: 8.5pt;
+      color: var(--ink-faint);
+      text-align: center;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Cover page ──────────────────────────────────────────────────── -->
+  <section class="cover">
+    <img class="bg" src="images/1.jpg" alt="Night cityscape seen from a hilltop, a valley of lit windows and expressway light trails beneath distant mountains"/>
+    <div class="scrim"></div>
+    <div class="masthead">
+      <span class="logo">The Long Way <span>Round</span></span>
+      <span>Issue 14 · Asia &amp; Beyond</span>
+    </div>
+    <div class="cover-text">
+      <span class="kicker">A Travel Journal</span>
+      <h1>Between the Neon and the Hills</h1>
+      <p class="dek">Three weeks tracing the slow seam where dense, sleepless cities give way to quiet green country — and the small doors that open onto both.</p>
+      <p class="byline">Words &amp; photographs by <strong>Mira Halloran</strong> &nbsp;·&nbsp; 21-day overland route</p>
+    </div>
+  </section>
+
+  <!-- ── Article ─────────────────────────────────────────────────────── -->
+  <p class="lede">There is a particular hour, just after the streetlights win out over the dusk, when a city looks less like a place and more like a circuit board left running overnight. We began there — on a ridge above a valley of ten million lit windows — and spent the next three weeks walking ourselves back down to silence.</p>
+
+  <p>The plan, if you could call it that, was to never fly between two stops if a train, a ferry, or a long bus could carry us instead. The reward for that stubbornness is the in-between: the rice terraces that blur past the window, the harbor towns nobody books a hotel in, the conversations with people who are surprised you came their way at all. What follows is part diary, part field guide — take the parts that fit your own long way round.</p>
+
+  <div class="section-head">
+    <span class="num">01 — The Cities</span>
+    <h2>Where the lights never quite sleep</h2>
+  </div>
+
+  <p>From the overlook the metropolis read as a single organism, its arteries the expressways threading the valley floor, pulsing white one way and red the other. We'd hiked up in the late afternoon precisely for this — to watch the switch flip, building by building, until the dark hillside below us was the only thing left unlit. Down in it the next morning, the scale rearranged itself into something human again: a bakery, a barber, a stationery shop that had clearly outlasted three recessions.</p>
+
+  <blockquote class="pullquote">
+    A skyline is a promise a city makes from a distance. The streets are where it tells you the truth.
+    <footer>— Field note, Day 3</footer>
+  </blockquote>
+
+  <h3>Asakusa, after the tour buses leave</h3>
+
+  <p>By six in the evening the great gate had emptied of its daytime crowds and refilled with a softer one — locals on the way home, students photographing lanterns, a vendor folding away the last of the rice crackers. The temple approach glowed amber under hundreds of paper lamps, each one a small warm argument against the coming night.</p>
+
+  <figure>
+    <img src="images/2.jpg" alt="The Sensō-ji temple gate at dusk, framed by a long avenue of red and white paper lanterns and a crowd of evening visitors"/>
+    <figcaption><b>Sensō-ji at golden hour.</b> The Nakamise approach runs straight to the Hōzōmon gate; arrive an hour before sunset and the lanterns light just as the daytime crowds thin.</figcaption>
+  </figure>
+
+  <p>A few blocks on, the side streets did what side streets everywhere do best — they got weird and wonderful. A corner izakaya wore its entire facade in lanterns, red on red on red, while the evening commute streamed across the intersection in front of it, indifferent and constant.</p>
+
+  <figure>
+    <img src="images/3.jpg" alt="A lantern-covered corner restaurant glowing red while crowds cross a wide intersection in the evening"/>
+    <figcaption><b>The crossing at dusk.</b> Street-level signage in this district is its own art form — order whatever the place with the most lanterns is selling.</figcaption>
+  </figure>
+
+  <aside class="tip">
+    <h4>Field tip</h4>
+    <p>In dense old districts, the most reliable navigation tool isn't your phone — it's altitude. Find the tallest gate or tower, fix it behind you, and you can wander the alleys for hours without ever truly getting lost.</p>
+  </aside>
+
+  <div class="stats">
+    <div class="stat"><div class="big">21</div><div class="lbl">Days on the road</div></div>
+    <div class="stat"><div class="big">6</div><div class="lbl">Countries</div></div>
+    <div class="stat"><div class="big">0</div><div class="lbl">Flights</div></div>
+    <div class="stat"><div class="big">312</div><div class="lbl">Rolls of film</div></div>
+  </div>
+
+  <div class="section-head">
+    <span class="num">02 — The Countryside</span>
+    <h2>Trading the grid for the green</h2>
+  </div>
+
+  <p>It takes the body a few days to recalibrate after a city like that. The countryside doesn't announce itself; it just slowly removes things — first the billboards, then the traffic, then, somewhere past the last suburb, the noise itself. By the time we reached the hills the loudest sound was wind moving through grass.</p>
+
+  <figure class="wide">
+    <img src="images/4.jpg" alt="Rolling green hills and meadows beneath a layered range of hazy mountains under a soft cloudy sky"/>
+    <figcaption><b>The valley at midday.</b> Working hills, not postcard ones — fences half-mended, a single flowering tree holding its ground at the bottom of the slope.</figcaption>
+  </figure>
+
+  <blockquote class="pullquote">
+    In the country you stop counting hours and start counting weather. The day is bright, then it isn't, then it is again.
+    <footer>— Field note, Day 12</footer>
+  </blockquote>
+
+  <p>We stayed in a stone farmhouse with thick walls and uneven floors, and woke each morning to a view that hadn't changed in two hundred years. We walked. That was the whole itinerary, most days — down to the village for bread, up the ridge to see how far the valley ran, back before the afternoon clouds rolled their shadows across the green.</p>
+
+  <div class="section-head">
+    <span class="num">03 — The Doors You Knock On</span>
+    <h2>Small thresholds, large welcomes</h2>
+  </div>
+
+  <p>If there is a single image I kept returning my camera to, it was doors. A door is where a place decides how to greet you. The last leg took us through a town of tall townhouses, each with a painted door set in pale stone — and behind one of them, a host who insisted we stay for a second pot of tea we did not need and have never forgotten.</p>
+
+  <div class="duo">
+    <img src="images/5.jpg" alt="A glossy green Georgian front door with a fanlight window above, framed by pale stone and flanked by iron railings and potted plants"/>
+    <img src="images/4.jpg" alt="Green hills and distant mountains under a cloudy sky"/>
+  </div>
+
+  <p>The door was the deep green of a holly leaf, with a fan of glass above it catching the gray afternoon light and a pair of planters standing guard on the worn stone steps. It looked like a hundred others on the street and like nothing else in the world, which is exactly the contradiction travel keeps teaching you.</p>
+
+  <div class="table-wrap">
+    <div class="cap">The route, condensed</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Leg</th>
+          <th>Where</th>
+          <th>By</th>
+          <th>Nights</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="day">01</span></td><td>Hilltop city &amp; the ridge overlook</td><td>Train + foot</td><td>4</td></tr>
+        <tr><td><span class="day">02</span></td><td>The old temple district</td><td>Metro</td><td>3</td></tr>
+        <tr><td><span class="day">03</span></td><td>Coastal ferry crossing</td><td>Overnight ferry</td><td>1</td></tr>
+        <tr><td><span class="day">04</span></td><td>The green valley &amp; stone farmhouse</td><td>Regional bus</td><td>6</td></tr>
+        <tr><td><span class="day">05</span></td><td>The townhouse street &amp; the green door</td><td>Train + foot</td><td>4</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <aside class="tip">
+    <h4>Field tip</h4>
+    <p>Always accept the second cup of tea. It costs you twenty minutes and buys you a story, a recommendation no guidebook has, and occasionally an invitation that reroutes the whole trip for the better.</p>
+  </aside>
+
+  <div class="dots">· · ·</div>
+
+  <p>We ended where every good trip ends — not at a destination, but at a doorstep, packs heavier with film and lighter with certainty. The cities had given us their noise and their neon; the hills had given the silence back. Somewhere in the long way between the two, the journey had quietly become the point. So take the slow boat. Climb the ridge for the free view. Knock on the green door. The map is only ever a suggestion — the real route is the one you walk.</p>
+
+  <div class="colophon">
+    The Long Way Round · Issue 14 · Words &amp; photographs by Mira Halloran · Set in Fraunces &amp; Inter · 2026
+  </div>
+
+</body>
+</html>
