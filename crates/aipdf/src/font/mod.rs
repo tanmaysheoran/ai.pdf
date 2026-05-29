@@ -1,0 +1,245 @@
+//! Embedded CID/Type0 TrueType font support.
+//!
+//! The visible PDF layer is drawn with a real embedded TrueType font using the
+//! `Identity-H` encoding. This means the content stream shows text as 2-byte
+//! glyph IDs (GIDs) rather than Latin-1 byte strings, so any Unicode codepoint
+//! the font has a glyph for renders correctly — and a `ToUnicode` CMap keeps
+//! copy/paste and text extraction working.
+//!
+//! To avoid the self-referential-borrow problem of holding a `ttf_parser::Face`
+//! (which borrows the font bytes) next to those bytes, we parse the face once at
+//! construction and precompute everything we need into owned tables: the cmap
+//! (codepoint → GID) and per-glyph advance widths. The raw bytes are retained
+//! only to be embedded as the `FontFile2` stream.
+
+use crate::{AipdfError, Result};
+use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
+
+mod dicts;
+
+pub use dicts::{cidfont_dict, descriptor_dict, flate, font_file2, tounicode_cmap, type0_dict};
+
+/// The default embedded font (DejaVu Sans — freely redistributable; covers
+/// Latin, Latin Extended, Greek, Cyrillic, and more). Point `--font` at a Noto
+/// CJK / RTL face to cover those scripts; the embedding machinery below is
+/// glyph-agnostic and works with any TrueType `glyf` font.
+const DEJAVU_SANS: &[u8] = include_bytes!("../../assets/DejaVuSans.ttf");
+
+/// A parsed font with owned lookup tables, ready for layout + embedding.
+#[derive(Clone)]
+pub struct Font {
+    pub(super) raw: Vec<u8>,
+    /// Glyph-space units per em (e.g. 2048 for DejaVu Sans).
+    pub(super) units_per_em: f32,
+    /// Unicode codepoint → glyph id.
+    pub(super) cmap: HashMap<u32, u16>,
+    /// Per-glyph horizontal advance, in font units (indexed by GID).
+    pub(super) advances: Vec<u16>,
+    // Descriptor metrics, scaled to the conventional 1000-units-per-em space.
+    pub(super) ascent: i32,
+    pub(super) descent: i32,
+    pub(super) cap_height: i32,
+    pub(super) bbox: (i32, i32, i32, i32),
+    pub(super) italic_angle: f32,
+    pub(super) postscript_name: String,
+}
+
+impl Font {
+    /// Load the built-in DejaVu Sans face.
+    pub fn default_font() -> Font {
+        // The vendored font is known-good, so parsing cannot fail in practice.
+        Self::from_bytes(DEJAVU_SANS.to_vec()).expect("vendored DejaVuSans.ttf must parse")
+    }
+
+    /// Load a TrueType font from disk (used for `--font`, e.g. a CJK face).
+    pub fn from_path(path: &Path) -> Result<Font> {
+        let bytes = std::fs::read(path)
+            .map_err(|e| AipdfError::InvalidXml(format!("cannot read font {path:?}: {e}")))?;
+        Self::from_bytes(bytes)
+    }
+
+    fn from_bytes(raw: Vec<u8>) -> Result<Font> {
+        let face = ttf_parser::Face::parse(&raw, 0)
+            .map_err(|e| AipdfError::InvalidXml(format!("invalid TrueType font: {e}")))?;
+
+        let upem = face.units_per_em();
+        if upem == 0 {
+            return Err(AipdfError::InvalidXml("font has zero units_per_em".into()));
+        }
+        let upem_f = upem as f32;
+        let to_1000 = |v: i32| (v as f32 * 1000.0 / upem_f).round() as i32;
+
+        // Precompute the Unicode cmap so per-char lookups don't need the face.
+        let mut cmap: HashMap<u32, u16> = HashMap::new();
+        if let Some(table) = face.tables().cmap {
+            for subtable in table.subtables {
+                if !subtable.is_unicode() {
+                    continue;
+                }
+                subtable.codepoints(|cp| {
+                    if let Some(gid) = subtable.glyph_index(cp) {
+                        cmap.entry(cp).or_insert(gid.0);
+                    }
+                });
+            }
+        }
+
+        // Precompute advances for every glyph.
+        let n = face.number_of_glyphs();
+        let mut advances = Vec::with_capacity(n as usize);
+        for gid in 0..n {
+            advances.push(
+                face.glyph_hor_advance(ttf_parser::GlyphId(gid))
+                    .unwrap_or(0),
+            );
+        }
+
+        let bb = face.global_bounding_box();
+        let cap = face.capital_height().unwrap_or(face.ascender()) as i32;
+        let raw_name = face
+            .names()
+            .into_iter()
+            .find(|n| n.name_id == ttf_parser::name_id::POST_SCRIPT_NAME)
+            .and_then(|n| n.to_string())
+            .unwrap_or_else(|| "EmbeddedFont".to_string());
+        // PostScript names must be plain ASCII without spaces/delimiters.
+        let postscript_name: String = raw_name
+            .chars()
+            .filter(|c| c.is_ascii_graphic() && !"()<>[]{}/% ".contains(*c))
+            .collect();
+
+        // Materialize all face-derived values before dropping the borrow on `raw`.
+        let ascent = to_1000(face.ascender() as i32);
+        let descent = to_1000(face.descender() as i32);
+        let cap_height = to_1000(cap);
+        let bbox = (
+            to_1000(bb.x_min as i32),
+            to_1000(bb.y_min as i32),
+            to_1000(bb.x_max as i32),
+            to_1000(bb.y_max as i32),
+        );
+        let italic_angle = face.italic_angle();
+        drop(face);
+
+        Ok(Font {
+            raw,
+            units_per_em: upem_f,
+            cmap,
+            advances,
+            ascent,
+            descent,
+            cap_height,
+            bbox,
+            italic_angle,
+            postscript_name: if postscript_name.is_empty() {
+                "EmbeddedFont".to_string()
+            } else {
+                postscript_name
+            },
+        })
+    }
+
+    /// Glyph id for a codepoint (0 / `.notdef` if the font lacks it).
+    pub fn glyph(&self, c: char) -> u16 {
+        self.cmap.get(&(c as u32)).copied().unwrap_or(0)
+    }
+
+    /// Advance width of a glyph in the 1000-units-per-em PDF glyph space.
+    pub fn advance_1000(&self, gid: u16) -> u32 {
+        let raw = *self.advances.get(gid as usize).unwrap_or(&0) as f32;
+        (raw * 1000.0 / self.units_per_em).round() as u32
+    }
+
+    /// Physical width of `text` at `size` points.
+    pub fn text_width(&self, text: &str, size: f32) -> f32 {
+        text.chars()
+            .map(|c| {
+                let gid = self.glyph(c);
+                *self.advances.get(gid as usize).unwrap_or(&0) as f32 * size / self.units_per_em
+            })
+            .sum()
+    }
+
+    /// Shape `text` into a sequence of (glyph id, source char) pairs. Chars the
+    /// font has no glyph for map to GID 0 and are still recorded so callers can
+    /// account for them; renderers typically skip GID 0.
+    pub fn shape(&self, text: &str) -> Vec<(u16, char)> {
+        text.chars().map(|c| (self.glyph(c), c)).collect()
+    }
+}
+
+/// Accumulates the glyphs actually used across a document so we can emit a
+/// compact `/W` widths array and a `/ToUnicode` CMap covering only those glyphs.
+#[derive(Default)]
+pub struct GlyphSet {
+    used: BTreeMap<u16, char>,
+}
+
+impl GlyphSet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Encode `text` into a content-stream hex string of 2-byte GIDs, recording
+    /// each used glyph. GID 0 (missing glyph) is skipped so we don't paint
+    /// `.notdef` boxes for unsupported codepoints.
+    pub fn encode_hex(&mut self, font: &Font, text: &str) -> String {
+        let mut out = String::new();
+        for (gid, ch) in font.shape(text) {
+            if gid == 0 {
+                continue;
+            }
+            self.used.insert(gid, ch);
+            out.push_str(&format!("{gid:04X}"));
+        }
+        out
+    }
+
+    #[allow(dead_code)] // used by tests + external callers
+    pub fn is_empty(&self) -> bool {
+        self.used.is_empty()
+    }
+
+    pub fn used(&self) -> &BTreeMap<u16, char> {
+        &self.used
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_font_has_unicode_glyphs() {
+        let f = Font::default_font();
+        // ASCII, Latin-1 accented, Cyrillic, and Greek are all in DejaVu Sans.
+        for c in ['A', 'é', 'ñ', 'ü', 'Ж', 'Ω'] {
+            assert_ne!(f.glyph(c), 0, "missing glyph for {c:?}");
+        }
+        assert!(f.text_width("Hello", 12.0) > 0.0);
+    }
+
+    #[test]
+    fn encode_records_glyphs_and_skips_notdef() {
+        let f = Font::default_font();
+        let mut gs = GlyphSet::new();
+        let hex = gs.encode_hex(&f, "Aé");
+        assert_eq!(hex.len(), 8, "two glyphs => 8 hex chars: {hex}");
+        assert_eq!(gs.used().len(), 2);
+        assert!(!gs.is_empty());
+    }
+
+    #[test]
+    fn font_file2_compresses_and_tounicode_maps() {
+        let f = Font::default_font();
+        let (compressed, len1) = font_file2(&f);
+        assert!(compressed.len() < len1, "flate should shrink the font");
+        let mut gs = GlyphSet::new();
+        gs.encode_hex(&f, "Ω");
+        let cmap = String::from_utf8(tounicode_cmap(gs.used())).unwrap();
+        // Ω is U+03A9.
+        assert!(cmap.contains("03A9"), "ToUnicode must map back to U+03A9");
+        assert!(cmap.contains("beginbfchar"));
+    }
+}

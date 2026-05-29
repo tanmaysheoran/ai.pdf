@@ -1,0 +1,502 @@
+{
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/figure_image.rs": {
+    "mtime": 1780037745.4690065,
+    "ast_hash": "b5446a7183b3cd903ebf5b2dccac30d2",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/ingest.rs": {
+    "mtime": 1780037745.4691248,
+    "ast_hash": "31ae58c7d453547360c12569bd2c359a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/coordinates.rs": {
+    "mtime": 1780037745.4688883,
+    "ast_hash": "98bf8b1d88157045808305fa810f1d1a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/roundtrip.rs": {
+    "mtime": 1780037745.4692488,
+    "ast_hash": "d40fa38a4b63c535dadd5a8f8b28c439",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/unicode_render.rs": {
+    "mtime": 1780037745.4695177,
+    "ast_hash": "bc817340982fc42f35c7c5c83643aff7",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/conformance.rs": {
+    "mtime": 1780055073.696431,
+    "ast_hash": "5a8292acdda3de709c91b05d598059d8",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/security_fuzz.rs": {
+    "mtime": 1780037745.469394,
+    "ast_hash": "a751383c30fcd602090c6e763f96e261",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/tests/browser.rs": {
+    "mtime": 1780055073.6958523,
+    "ast_hash": "7249ecd00cc8d99a489353504a0390df",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/xml.rs": {
+    "mtime": 1780037745.4685805,
+    "ast_hash": "0c333921fda2ffce02706cd9207c9e5f",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/security.rs": {
+    "mtime": 1780037745.4680257,
+    "ast_hash": "25ba341079412866e3dae25daacaa611",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/lib.rs": {
+    "mtime": 1780055073.6943467,
+    "ast_hash": "19fdbb97b497648187a503bb56be9509",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/browser.rs": {
+    "mtime": 1780055073.693209,
+    "ast_hash": "8f6d917641228e53068cf7c21e98277e",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/markdown/render.rs": {
+    "mtime": 1780056324.0561662,
+    "ast_hash": "365402d870c33d8470725430c485487f",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/markdown/ast_nodes.rs": {
+    "mtime": 1780056291.4672518,
+    "ast_hash": "47ad9aedae7efc511c2f2c89ed16dd8c",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/markdown/mod.rs": {
+    "mtime": 1780056365.4923272,
+    "ast_hash": "9eb9b3b7e46b2d071d91966173e4c335",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/markdown/ast.rs": {
+    "mtime": 1780056355.4689481,
+    "ast_hash": "43deb7457f52846fe63a8c49a5f40526",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/ingest/extract.rs": {
+    "mtime": 1780062695.120296,
+    "ast_hash": "48f73ea41aa3241247dc53227dbb9adb",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/ingest/mod.rs": {
+    "mtime": 1780062736.5745602,
+    "ast_hash": "1f68bf2a22ba5653592f40c134dd2f86",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/source/html.rs": {
+    "mtime": 1780062917.9754033,
+    "ast_hash": "83f56046feac844addc9d79315461f40",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/source/mod.rs": {
+    "mtime": 1780062929.9922922,
+    "ast_hash": "a89f00439ce9982de81e8ef774947dd3",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/source/html_walk.rs": {
+    "mtime": 1780062889.0605042,
+    "ast_hash": "e007453a2752e7e2419fa7db60e4e374",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/source/markdown.rs": {
+    "mtime": 1780055994.7714865,
+    "ast_hash": "bc42f064b40a3aba1cb077f178ec1d50",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/source/typst.rs": {
+    "mtime": 1780056023.613479,
+    "ast_hash": "23ee021fdbf9d8076eae4a72fb05fe99",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/pdf/write.rs": {
+    "mtime": 1780056220.6402018,
+    "ast_hash": "2cd9ac1ccf9c04c1a90ebd7f8c61631e",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/pdf/xobject.rs": {
+    "mtime": 1780062986.216274,
+    "ast_hash": "32ee5760710232f75aeaab05e12d0172",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/pdf/detect.rs": {
+    "mtime": 1780056113.427959,
+    "ast_hash": "949acbb4208cfa53ac1a04ee815ebc01",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/pdf/mod.rs": {
+    "mtime": 1780063021.9478714,
+    "ast_hash": "10ea63f420ee9c89e01375da5fe424ad",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/pdf/meta.rs": {
+    "mtime": 1780056189.2439184,
+    "ast_hash": "0586081ee1f75c28c9fba2b935b2d1de",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/pdf/images.rs": {
+    "mtime": 1780063014.642319,
+    "ast_hash": "a6d7af324965d8c282829e4aa25b187d",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/layout.rs": {
+    "mtime": 1780055880.9346817,
+    "ast_hash": "51105a55415f51c8e91b5a94d5ac6319",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/options.rs": {
+    "mtime": 1780055667.319609,
+    "ast_hash": "5c4c18a5daa6642e3c6805781ce70384",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/build.rs": {
+    "mtime": 1780055864.295072,
+    "ast_hash": "f24e9f9ae0ea1ed0d808297f6f662aff",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/image.rs": {
+    "mtime": 1780055657.073082,
+    "ast_hash": "2b7b008d8993fe2baa1ed2f289b27245",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/mod.rs": {
+    "mtime": 1780055870.14736,
+    "ast_hash": "a3c3148908e4bde76800b5fbfd6d074a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/layout_blocks.rs": {
+    "mtime": 1780055885.510487,
+    "ast_hash": "353c609e8abab025f19c2bbddadd6d8d",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/parse.rs": {
+    "mtime": 1780055708.005498,
+    "ast_hash": "fb6672c8611231eed475233c53251b2c",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/render/assemble.rs": {
+    "mtime": 1780055816.4562376,
+    "ast_hash": "1d0e204b81f91945ad809e9b1c24a559",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/onto/render_onto.rs": {
+    "mtime": 1780056430.5289764,
+    "ast_hash": "59a9452f4389fd0399714c5fb0df33f2",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/onto/encode.rs": {
+    "mtime": 1780056409.2756855,
+    "ast_hash": "e68a11c95335e6ae870f720f14e5f530",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/onto/build.rs": {
+    "mtime": 1780056472.0801303,
+    "ast_hash": "150ad048d73bb237cb8eec7ec39c6127",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/onto/mod.rs": {
+    "mtime": 1780056506.8655767,
+    "ast_hash": "186c6597eb92fb421ed126968388af9b",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/font/dicts.rs": {
+    "mtime": 1780056562.991208,
+    "ast_hash": "6d8f8a53c1d9c4e2fa9c6261f98b0cd5",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/src/font/mod.rs": {
+    "mtime": 1780062569.3711386,
+    "ast_hash": "f0e036bd66ed842ac47c658f37e1f401",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf-cli/src/main.rs": {
+    "mtime": 1780055073.6926773,
+    "ast_hash": "97281b986ca1f8b442d4f9f249cddd24",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/tests/mcp_smoke.py": {
+    "mtime": 1780055073.712847,
+    "ast_hash": "ea0cea703147dc517f4a060cbbd417d4",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/tests/build_sample.mjs": {
+    "mtime": 1779983638.785663,
+    "ast_hash": "46beaac6b6f9ba1e922373cf216815e9",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/tests/conformance_python.py": {
+    "mtime": 1780055073.712467,
+    "ast_hash": "9309fddd8fad768724dd19321961a893",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/tests/python_smoke.py": {
+    "mtime": 1780055073.7132213,
+    "ast_hash": "f4fcda3a1ba8544b2c587ae7dd174c36",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/tests/conformance/rich.ast.json": {
+    "mtime": 1780055073.7121165,
+    "ast_hash": "82c4be2c05dc23723373595395f23ee5",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_source.py": {
+    "mtime": 1780055756.498853,
+    "ast_hash": "dbab9298d0a254ff77a5191cb701bdad",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_onto.py": {
+    "mtime": 1780055726.0864866,
+    "ast_hash": "118a9b66bc722c8d449a9fc93807f09d",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_source_html.py": {
+    "mtime": 1780055786.2298431,
+    "ast_hash": "8f6b85bc3bbbd0770a446b75bcad0e1e",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/__init__.py": {
+    "mtime": 1780055073.7076492,
+    "ast_hash": "92245b18af1110758cb07c1badd7b6d9",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/core.py": {
+    "mtime": 1780055804.9378324,
+    "ast_hash": "bfb778e1a3a11de346daff905ddeb8ef",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_ast.py": {
+    "mtime": 1780055699.7604187,
+    "ast_hash": "30bddc4d6f05b4c344d44193a91b9983",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/cli.py": {
+    "mtime": 1780055073.7083044,
+    "ast_hash": "01c22194dceb7da5e339ea0762feebf1",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_markdown.py": {
+    "mtime": 1780055677.9434009,
+    "ast_hash": "1e4002efecb659ccf3068a273210d6a7",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_pdf.py": {
+    "mtime": 1780055659.6208925,
+    "ast_hash": "569357256ee8d0f05699d8b36ded3073",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_mcp_tools.py": {
+    "mtime": 1780055837.9516943,
+    "ast_hash": "765413cc5b4661904991e085fbefd29a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/_models.py": {
+    "mtime": 1780055640.2746394,
+    "ast_hash": "2f06fd339ae81a934ac6df61267dfa1c",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/aipdf/mcp_server.py": {
+    "mtime": 1780055866.1940155,
+    "ast_hash": "873522df98c84a054d14a2879b07eede",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/package.json": {
+    "mtime": 1779983545.5267045,
+    "ast_hash": "ea0f2cf48e1d2d3fd6d908c25a786bed",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/tsconfig.json": {
+    "mtime": 1779983545.587949,
+    "ast_hash": "7850751502b4deb589f1baddea98b2b3",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/test/aipdf.test.mjs": {
+    "mtime": 1780055073.7111802,
+    "ast_hash": "70030117d3b940cb195ddd1ca5cc8ec4",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/test/conformance.test.mjs": {
+    "mtime": 1780055073.711813,
+    "ast_hash": "546bbb8d3f973c46eb8160e0f5e22ca2",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/sanitize.ts": {
+    "mtime": 1780055701.7541878,
+    "ast_hash": "3761c85d830756efda3dcc6101add6a1",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/source.ts": {
+    "mtime": 1780063160.2094305,
+    "ast_hash": "6cda730e64a9257d6aa58bc34aa9f422",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/onto.ts": {
+    "mtime": 1780055809.9190602,
+    "ast_hash": "b4b898349d10e1c21301075c82a6f16a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/ast.ts": {
+    "mtime": 1780055782.7986467,
+    "ast_hash": "0bdbe6e7e917db59800abb7168998a84",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/markdown.ts": {
+    "mtime": 1780055756.8272824,
+    "ast_hash": "2d858695c8180b1612829553f1d55b58",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/cli.ts": {
+    "mtime": 1780055883.1178422,
+    "ast_hash": "7bf38c26feae447aa2a69af09e5990a9",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/xml-parse.ts": {
+    "mtime": 1780055741.0235353,
+    "ast_hash": "d10894d9b948dcd5d016c5c23d365f8d",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/types.ts": {
+    "mtime": 1780055692.9665062,
+    "ast_hash": "50ce2ea02d38d0604dce03ae92a9e3c7",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/pdf.ts": {
+    "mtime": 1780055903.1593063,
+    "ast_hash": "650f5982865dd3a4aab69ea7eb388ac5",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/constants.ts": {
+    "mtime": 1780055683.980976,
+    "ast_hash": "ad947a5e55b9391d76546c4fb9242ee7",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/index.ts": {
+    "mtime": 1780063169.0352383,
+    "ast_hash": "fc3605713813b2c1859fa94af268106e",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/src/source-html.ts": {
+    "mtime": 1780063123.7142887,
+    "ast_hash": "c496c78a857b7b8894b6d11ac5205b36",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/examples/extract_demo.py": {
+    "mtime": 1779983134.2894177,
+    "ast_hash": "9bb477ac7cd137366561520d77b43552",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/README.md": {
+    "mtime": 1780037745.4628186,
+    "ast_hash": "3cfdb36e66442768db44a317d3b4887a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/CLAUDE.md": {
+    "mtime": 1780055073.6921759,
+    "ast_hash": "fd1c6d9fcab7d21596b1e29c570e6941",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/crates/aipdf/assets/FONT-LICENSE.md": {
+    "mtime": 1780037745.4661083,
+    "ast_hash": "7eaaea56425f494af43381d6a3b4f5d7",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/tests/conformance/minimal.md": {
+    "mtime": 1780037745.4794536,
+    "ast_hash": "a21243c97908e32da01abec5dd6bcd14",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/tests/conformance/rich.md": {
+    "mtime": 1780037745.4798248,
+    "ast_hash": "6714fd3b91d068ab6f96ca5acb520cf6",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/docs/mcp.md": {
+    "mtime": 1780055073.6969457,
+    "ast_hash": "a2890e42588e058a279841b7b2cb2527",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/docs/compatibility.md": {
+    "mtime": 1779983134.00302,
+    "ast_hash": "28fe27e93b297bf003d773a56bbd716f",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/docs/spec.md": {
+    "mtime": 1780037745.4701118,
+    "ast_hash": "f3d50197f0578ce3780b73c530b694a7",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/docs/security.md": {
+    "mtime": 1780037745.4698436,
+    "ast_hash": "d386c7fdc83099303ef5646174e65280",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/docs/diagrams/architecture.md": {
+    "mtime": 1779983134.070757,
+    "ast_hash": "f1d778491b4761a0ef743dff6301214b",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/html/comprehensive.html": {
+    "mtime": 1779993939.0123289,
+    "ast_hash": "606838027c501918e98851920ea0672a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/python/README.md": {
+    "mtime": 1779983545.3495626,
+    "ast_hash": "b0afcc1b845d5e7d8b72506579133deb",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/sdk/typescript/README.md": {
+    "mtime": 1779983545.7156935,
+    "ast_hash": "76fe6942c4ee72ec0d83754b1fb7ca6f",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/benches/compression-analysis.md": {
+    "mtime": 1779983975.5600088,
+    "ast_hash": "b9686f6040e52be106250271b1c001e6",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/maximal.pdf": {
+    "mtime": 1780037745.4708183,
+    "ast_hash": "b230e47e71e5e6a1115601a9643ce12a",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/onto.pdf": {
+    "mtime": 1780037745.4763892,
+    "ast_hash": "9d0da6827dd5f1c399e383fc3ac0ff06",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/onto.ai.pdf": {
+    "mtime": 1780037745.4740934,
+    "ast_hash": "005519a6ae4aeb9c9d941566945be63f",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/minimal.pdf": {
+    "mtime": 1780037745.4721403,
+    "ast_hash": "e725dee217067be58213acf8582f8358",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/html/comprehensive.ai.pdf": {
+    "mtime": 1780055073.7070072,
+    "ast_hash": "0d7fb94a5e36e08a02aa416610c02af5",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/1.jpg": {
+    "mtime": 1778200168.251448,
+    "ast_hash": "9a8581022e85dd30a1d291391ad39d43",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/html/1.jpg": {
+    "mtime": 1778200168.251448,
+    "ast_hash": "9a8581022e85dd30a1d291391ad39d43",
+    "semantic_hash": ""
+  },
+  "/Users/tanmaysheoran/Downloads/source-private/aipdf/samples/xml/1.jpg": {
+    "mtime": 1778200168.251448,
+    "ast_hash": "9a8581022e85dd30a1d291391ad39d43",
+    "semantic_hash": ""
+  }
+}
