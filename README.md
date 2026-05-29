@@ -107,6 +107,11 @@ Once a file has a semantic layer, you can export to:
 aipdf build samples/minimal.xml
 aipdf build samples/comprehensive.html --render full
 aipdf build paper.md -o paper.ai.pdf
+aipdf build paper.md --render full --font /path/to/NotoSansCJK.ttf  # embed a CJK font
+
+# Ingest an existing PDF (extract text + optional OCR, attach semantic layer)
+aipdf ingest scanned.pdf -o scanned.ai.pdf            # OCR scanned pages if tesseract is installed
+aipdf ingest report.pdf --ocr never
 
 # Inspect and validate
 aipdf inspect paper.ai.pdf
@@ -124,6 +129,17 @@ aipdf export paper.ai.pdf --format markdown-ast
 Render modes: `--render minimal` (plain text page, fast) or `--render full` (laid-out PDF with headings, tables, code blocks).
 
 Page sizes: `--page-size letter` (default) or `--page-size a4`.
+
+### MCP server (agent integration)
+
+The Python package ships an MCP stdio server so agents can read `.ai.pdf`
+structure directly (`aipdf_inspect`, `aipdf_extract`, `aipdf_reading_order`):
+
+```bash
+aipdf-mcp          # or: python -m aipdf.mcp_server
+```
+
+See [`docs/mcp.md`](docs/mcp.md) for client configuration.
 
 ---
 
