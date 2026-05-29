@@ -61,7 +61,7 @@ pub fn ingest_pdf(pdf_bytes: &[u8], opts: &IngestOptions) -> Result<Vec<u8>> {
     let xml = sanitize_xml(&xml)?;
     validate_xml(&xml)?;
 
-    attach_semantic_layer(&mut doc, &xml)?;
+    attach_semantic_layer(&mut doc, &xml, "ingested-pdf")?;
 
     let mut out = Vec::new();
     doc.save_to(&mut out)
@@ -215,7 +215,15 @@ fn largest_page_jpeg(doc: &Document, pageno: u32) -> Option<Vec<u8>> {
 
 // ── Attach the semantic layer to an existing document ──────────────────────────
 
-fn attach_semantic_layer(doc: &mut Document, xml: &str) -> Result<()> {
+/// Attach a Brotli-compressed semantic XML layer to an already-parsed PDF,
+/// patching its catalog (`/AF`, `/Metadata`, `/Names /EmbeddedFiles`) while
+/// preserving the existing visuals. Shared by `ingest` and the browser render
+/// path; `source_format` is recorded in the XMP packet (`aipdf:SourceFormat`).
+pub(crate) fn attach_semantic_layer(
+    doc: &mut Document,
+    xml: &str,
+    source_format: &str,
+) -> Result<()> {
     let compressed = brotli_compress(xml.as_bytes())?;
     let compressed_len = compressed.len();
     let checksum = Sha256::digest(&compressed).to_vec();
@@ -260,7 +268,7 @@ fn attach_semantic_layer(doc: &mut Document, xml: &str) -> Result<()> {
             "Type" => Object::Name(b"Metadata".to_vec()),
             "Subtype" => Object::Name(b"XML".to_vec()),
         },
-        xmp_metadata(xml.len(), compressed_len).into_bytes(),
+        xmp_metadata(xml.len(), compressed_len, source_format).into_bytes(),
     );
     let meta_id = doc.add_object(meta);
 
@@ -284,7 +292,7 @@ fn attach_semantic_layer(doc: &mut Document, xml: &str) -> Result<()> {
     Ok(())
 }
 
-fn xmp_metadata(xml_bytes: usize, compressed_bytes: usize) -> String {
+fn xmp_metadata(xml_bytes: usize, compressed_bytes: usize, source_format: &str) -> String {
     format!(
         r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -295,7 +303,7 @@ fn xmp_metadata(xml_bytes: usize, compressed_bytes: usize) -> String {
       <aipdf:SemanticFile>{SEMANTIC_FILENAME}</aipdf:SemanticFile>
       <aipdf:SemanticEncoding>brotli</aipdf:SemanticEncoding>
       <aipdf:SemanticLayerPresent>true</aipdf:SemanticLayerPresent>
-      <aipdf:SourceFormat>ingested-pdf</aipdf:SourceFormat>
+      <aipdf:SourceFormat>{source_format}</aipdf:SourceFormat>
       <aipdf:SemanticXmlBytes>{xml_bytes}</aipdf:SemanticXmlBytes>
       <aipdf:SemanticCompressedBytes>{compressed_bytes}</aipdf:SemanticCompressedBytes>
     </rdf:Description>
