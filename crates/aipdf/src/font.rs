@@ -195,6 +195,7 @@ impl GlyphSet {
         out
     }
 
+    #[allow(dead_code)] // used by tests + external callers
     pub fn is_empty(&self) -> bool {
         self.used.is_empty()
     }
