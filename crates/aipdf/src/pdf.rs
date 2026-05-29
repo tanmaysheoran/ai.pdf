@@ -6,6 +6,9 @@ use crate::{
     AipdfError, Result,
 };
 use brotli::{CompressorReader, Decompressor};
+use flate2::read::ZlibDecoder;
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use sha2::{Digest, Sha256};
 use std::io::Read;
 
@@ -109,6 +112,162 @@ pub fn inspect_pdf(bytes: &[u8]) -> InspectReport {
 pub fn extract_semantic_xml(bytes: &[u8]) -> Result<String> {
     let compressed = find_semantic_compressed(bytes).ok_or(AipdfError::SemanticLayerNotFound)?;
     decompress_semantic(&compressed)
+}
+
+/// A raster image extracted from the PDF's embedded XObjects, correlated with
+/// its original `src` and `alt` attributes from the semantic XML.
+#[derive(Debug, Clone)]
+pub struct ImageExtract {
+    /// Original `src` attribute from the semantic XML (e.g. `"1.jpg"`).
+    pub src: String,
+    /// `alt` attribute from the semantic XML.
+    pub alt: String,
+    pub width: u32,
+    pub height: u32,
+    /// Raw decompressed RGB8 pixel data (row-major, no padding).
+    pub raw_rgb8: Vec<u8>,
+}
+
+impl ImageExtract {
+    /// Save the image to `dir/self.src`, creating parent directories as needed.
+    /// The encoder is inferred from the filename extension (`.jpg` → JPEG, `.png` → PNG, etc.).
+    pub fn save_to(&self, dir: &std::path::Path) -> Result<std::path::PathBuf> {
+        use image::{ImageBuffer, Rgb};
+        let dest = dir.join(&self.src);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(AipdfError::Io)?;
+        }
+        let img = ImageBuffer::<Rgb<u8>, _>::from_raw(self.width, self.height, self.raw_rgb8.clone())
+            .ok_or_else(|| AipdfError::InvalidXml("image dimensions do not match pixel data length".into()))?;
+        img.save(&dest).map_err(|e| {
+            AipdfError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        })?;
+        Ok(dest)
+    }
+}
+
+/// Extract all raster images embedded in a `--render full` AIPDF file.
+///
+/// Images are matched positionally: the *n*-th `<image>` element in the
+/// semantic XML corresponds to the *n*-th `/Im{n}` XObject in the PDF.
+/// If the counts differ (some figures had no source file at build time and
+/// were rendered as placeholders), only the matched prefix is returned.
+pub fn extract_images(bytes: &[u8]) -> Result<Vec<ImageExtract>> {
+    let xml = extract_semantic_xml(bytes)?;
+    let xml_images = parse_image_refs(&xml);
+    if xml_images.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let doc = lopdf::Document::load_mem(bytes).map_err(|e| AipdfError::Pdf(e.to_string()))?;
+    let xobjects = collect_image_xobjects(&doc);
+
+    let count = xml_images.len().min(xobjects.len());
+    let mut result = Vec::with_capacity(count);
+    for i in 0..count {
+        let (src, alt) = &xml_images[i];
+        let (width, height, ref compressed) = xobjects[i];
+        let mut decoder = ZlibDecoder::new(compressed.as_slice());
+        let mut raw_rgb8 = Vec::new();
+        decoder
+            .read_to_end(&mut raw_rgb8)
+            .map_err(|e| AipdfError::Compression(e.to_string()))?;
+        result.push(ImageExtract {
+            src: src.clone(),
+            alt: alt.clone(),
+            width,
+            height,
+            raw_rgb8,
+        });
+    }
+    Ok(result)
+}
+
+fn parse_image_refs(xml: &str) -> Vec<(String, String)> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut images = Vec::new();
+    loop {
+        match reader.read_event() {
+            Ok(Event::Empty(e)) if e.name().as_ref() == b"image" => {
+                let mut src = String::new();
+                let mut alt = String::new();
+                for attr in e.attributes().flatten() {
+                    match attr.key.as_ref() {
+                        b"src" => src = String::from_utf8_lossy(attr.value.as_ref()).into_owned(),
+                        b"alt" => alt = String::from_utf8_lossy(attr.value.as_ref()).into_owned(),
+                        _ => {}
+                    }
+                }
+                if !src.is_empty() {
+                    images.push((src, alt));
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    images
+}
+
+fn collect_image_xobjects(doc: &lopdf::Document) -> Vec<(u32, u32, Vec<u8>)> {
+    use lopdf::Object;
+    use std::collections::BTreeMap;
+
+    let mut seen: BTreeMap<String, (u32, u32, Vec<u8>)> = BTreeMap::new();
+    for (_page_num, page_id) in doc.get_pages() {
+        let Ok((Some(resources), _)) = doc.get_page_resources(page_id) else {
+            continue;
+        };
+        let Some(xobjects) = resources
+            .get(b"XObject")
+            .ok()
+            .and_then(|o| o.as_dict().ok())
+        else {
+            continue;
+        };
+        for (name_bytes, obj) in xobjects.iter() {
+            let name = String::from_utf8_lossy(name_bytes).into_owned();
+            if seen.contains_key(&name) {
+                continue;
+            }
+            let Ok(id) = obj.as_reference() else { continue };
+            let Ok(Object::Stream(s)) = doc.get_object(id) else {
+                continue;
+            };
+            let is_image = s
+                .dict
+                .get(b"Subtype")
+                .ok()
+                .and_then(|o| o.as_name().ok())
+                == Some(b"Image".as_ref());
+            let is_flate = s
+                .dict
+                .get(b"Filter")
+                .ok()
+                .and_then(|o| o.as_name().ok())
+                == Some(b"FlateDecode".as_ref());
+            if !is_image || !is_flate {
+                continue;
+            }
+            let Ok(w) = s.dict.get(b"Width").and_then(|o| o.as_i64()) else {
+                continue;
+            };
+            let Ok(h) = s.dict.get(b"Height").and_then(|o| o.as_i64()) else {
+                continue;
+            };
+            seen.insert(name, (w as u32, h as u32, s.content.clone()));
+        }
+    }
+
+    // Sort by numeric suffix so Im1 < Im2 < Im10 (not lexicographic).
+    let mut entries: Vec<(String, (u32, u32, Vec<u8>))> = seen.into_iter().collect();
+    entries.sort_by_key(|(name, _)| {
+        name.strip_prefix("Im")
+            .and_then(|n| n.parse::<u32>().ok())
+            .unwrap_or(u32::MAX)
+    });
+    entries.into_iter().map(|(_, v)| v).collect()
 }
 
 fn decompress_semantic(compressed: &[u8]) -> Result<String> {

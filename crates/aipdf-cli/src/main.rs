@@ -1,6 +1,6 @@
 use aipdf::{
-    build_aipdf, build_aipdf_browser, extract_semantic_xml, ingest_pdf, inspect_pdf,
-    semantic_xml_from_source, validate_xml, xml_to_markdown, xml_to_markdown_ast_json,
+    build_aipdf, build_aipdf_browser, extract_images, extract_semantic_xml, ingest_pdf,
+    inspect_pdf, semantic_xml_from_source, validate_xml, xml_to_markdown, xml_to_markdown_ast_json,
     xml_to_onto, BuildOptions, Font, IngestOptions, OcrMode, PageOptions, RenderMode, SourceKind,
 };
 use clap::{Parser, Subcommand, ValueEnum};
@@ -54,6 +54,9 @@ enum Command {
         file: PathBuf,
         #[arg(long, value_enum, default_value_t = Format::Xml)]
         format: Format,
+        /// Save output and extracted images to this directory instead of printing to stdout.
+        #[arg(long)]
+        save: Option<PathBuf>,
     },
     Bench {
         input: PathBuf,
@@ -203,14 +206,50 @@ fn main() -> aipdf::Result<()> {
             validate_xml(&xml)?;
             println!("valid");
         }
-        Command::Export { file, format } => {
+        Command::Export { file, format, save } => {
             let bytes = fs::read(&file)?;
             let xml = extract_semantic_xml(&bytes)?;
-            match format {
-                Format::Xml => println!("{xml}"),
-                Format::Markdown => println!("{}", xml_to_markdown(&xml)),
-                Format::MarkdownAst => println!("{}", xml_to_markdown_ast_json(&xml)),
-                Format::Onto => println!("{}", xml_to_onto(&xml)),
+            let content = match format {
+                Format::Xml => xml.clone(),
+                Format::Markdown => xml_to_markdown(&xml),
+                Format::MarkdownAst => xml_to_markdown_ast_json(&xml),
+                Format::Onto => xml_to_onto(&xml),
+            };
+            match save {
+                None => println!("{content}"),
+                Some(dir) => {
+                    fs::create_dir_all(&dir)?;
+                    let stem = file
+                        .file_stem()
+                        .unwrap_or(file.as_os_str())
+                        .to_string_lossy();
+                    // Strip a double extension like "doc.ai" → "doc" for "doc.ai.pdf".
+                    let stem = stem.trim_end_matches(".ai");
+                    let ext = match format {
+                        Format::Xml => "xml",
+                        Format::Markdown => "md",
+                        Format::MarkdownAst => "json",
+                        Format::Onto => "onto",
+                    };
+                    let out_path = dir.join(format!("{stem}.{ext}"));
+                    fs::write(&out_path, &content)?;
+                    println!("saved: {}", out_path.display());
+
+                    let imgs = extract_images(&bytes)?;
+                    if imgs.is_empty() {
+                        // Check whether the XML actually had image refs so we
+                        // can give a useful hint rather than silent omission.
+                        let xml2 = extract_semantic_xml(&bytes)?;
+                        if xml2.contains("<image ") {
+                            eprintln!("note: document contains image references but no extractable image XObjects were found");
+                            eprintln!("      image extraction requires a PDF built with --render full");
+                        }
+                    }
+                    for img in imgs {
+                        let saved = img.save_to(&dir)?;
+                        println!("saved: {}", saved.display());
+                    }
+                }
             }
         }
         Command::Bench { input } => {
