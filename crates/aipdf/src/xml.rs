@@ -11,6 +11,30 @@ pub struct SemanticBlock {
     pub text: String,
 }
 
+/// Major schema version this build implements. Version negotiation is
+/// forward-compatible within a major version: any `1.x` payload is accepted and
+/// unknown elements/attributes are ignored, so a v1.0 reader can open a v1.3
+/// file. A different major version is rejected — readers encountering one
+/// should fall back to treating the file as an ordinary PDF (see docs/spec.md).
+pub const SUPPORTED_MAJOR_VERSION: u32 = 1;
+
+fn check_supported_version(version: &str) -> Result<()> {
+    let major: u32 = version
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .parse()
+        .map_err(|_| {
+            AipdfError::InvalidXml(format!("malformed document version `{version}`"))
+        })?;
+    if major != SUPPORTED_MAJOR_VERSION {
+        return Err(AipdfError::InvalidXml(format!(
+            "unsupported document version `{version}`: this build supports {SUPPORTED_MAJOR_VERSION}.x"
+        )));
+    }
+    Ok(())
+}
+
 pub fn validate_xml(xml: &str) -> Result<()> {
     let xml = sanitize_xml(xml)?;
     let mut reader = Reader::from_str(&xml);
@@ -31,17 +55,18 @@ pub fn validate_xml(xml: &str) -> Result<()> {
                         ));
                     }
                     root_seen = true;
-                    let has_version = e
+                    let version = e
                         .attributes()
                         .flatten()
                         .find(|a| a.key.as_ref() == b"version")
-                        .map(|a| !a.value.as_ref().is_empty())
-                        .unwrap_or(false);
-                    if !has_version {
+                        .map(|a| String::from_utf8_lossy(a.value.as_ref()).trim().to_string())
+                        .unwrap_or_default();
+                    if version.is_empty() {
                         return Err(AipdfError::InvalidXml(
                             "document version must be present".to_string(),
                         ));
                     }
+                    check_supported_version(&version)?;
                 }
                 if name == "section" {
                     section_seen = true;
@@ -162,6 +187,32 @@ pub fn get_tables(xml: &str) -> Result<Vec<String>> {
 
 pub fn find_citations(xml: &str) -> Result<Vec<String>> {
     collect_element_text(xml, "citation")
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    fn doc(version: &str) -> String {
+        format!(
+            r#"<document version="{version}"><section id="s1"><paragraph>x</paragraph></section></document>"#
+        )
+    }
+
+    #[test]
+    fn accepts_any_1_x() {
+        for v in ["1.0", "1.3", "1.99"] {
+            validate_xml(&doc(v)).unwrap_or_else(|e| panic!("{v} should validate: {e}"));
+        }
+    }
+
+    #[test]
+    fn rejects_other_majors_and_malformed() {
+        assert!(validate_xml(&doc("2.0")).is_err());
+        assert!(validate_xml(&doc("0.9")).is_err());
+        assert!(validate_xml(&doc("abc")).is_err());
+        assert!(validate_xml(&doc("")).is_err());
+    }
 }
 
 fn collect_element_text(xml: &str, element: &str) -> Result<Vec<String>> {

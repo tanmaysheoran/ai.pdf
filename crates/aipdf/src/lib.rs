@@ -1,3 +1,5 @@
+pub(crate) mod font;
+mod ingest;
 mod markdown;
 mod onto;
 mod pdf;
@@ -6,6 +8,8 @@ mod security;
 mod source;
 mod xml;
 
+pub use font::Font;
+pub use ingest::{ingest_pdf, IngestOptions, OcrMode};
 pub use markdown::{xml_to_markdown, xml_to_markdown_ast_json};
 pub use onto::xml_to_onto;
 pub use pdf::{
@@ -14,7 +18,10 @@ pub use pdf::{
 pub use render::PageOptions;
 pub use security::sanitize_xml;
 pub use source::{semantic_xml_from_source, SourceKind};
-pub use xml::{find_citations, get_reading_order, get_tables, validate_xml, SemanticBlock};
+pub use xml::{
+    find_citations, get_reading_order, get_tables, validate_xml, SemanticBlock,
+    SUPPORTED_MAJOR_VERSION,
+};
 
 use std::fs;
 use std::path::Path;

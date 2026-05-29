@@ -1,0 +1,41 @@
+Document[1]:
+    version: 1.0
+    title: Minimal AIPDF Sample
+    source_format: aipdf.semantic.xml
+
+Sections[1]:
+    id: s1
+    level: 1
+    page: 1
+    role: 
+    title: Introduction
+
+Blocks[3]:
+    id: t1|p1|c1
+    kind: title|paragraph|citation
+    section_id: s1|s1|s1
+    level: 1|1|1
+    page: 1|1|1
+    bbox: 72,720,420,748|72,684,500,710|72,560,500,580
+    role: title|paragraph|citation
+    text: Introduction|AI-native documents combine visual fidelity with semantic structure.|PDF associated files are used for the semantic payload.
+
+Tables[1]:
+    id: tbl1
+    page: 1
+    bbox: 72,600,420,670
+    caption: Compression targets
+    rows: Target^Limit|Ideal overhead^<3%|Maximum overhead^<10%
+
+Figures[0]:
+    id: 
+    page: 
+    bbox: 
+    caption: 
+    alt: 
+    source: 
+
+References[0]:
+    id: 
+    type: 
+    text:
