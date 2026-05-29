@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { brotliDecompressSync } from "node:zlib";
+import { execFileSync } from "node:child_process";
 
 // Conformant PDF name for MIME application/aipdf+xml+br ('/' escaped as #2F).
 const SEMANTIC_SUBTYPE = Buffer.from("/application#2Faipdf+xml+br");
@@ -22,6 +23,14 @@ export interface SemanticBlock {
   page?: number;
   bbox?: string;
   text: string;
+}
+
+/** Mirror of the Rust core's `InspectReport` (pdf.rs) / `aipdf inspect`. */
+export interface InspectReport {
+  isPdf: boolean;
+  hasSemanticLayer: boolean;
+  semanticCompressedBytes?: number;
+  semanticXmlBytes?: number;
 }
 
 export class AIPDFError extends Error {}
@@ -47,6 +56,18 @@ export class AIPDFDocument {
 
   get hasSemanticLayer(): boolean {
     return this.xml !== undefined;
+  }
+
+  /** Byte-level report matching `aipdf inspect` (re-reads the backing file). */
+  inspect(): InspectReport {
+    if (this.path === undefined) throw new AIPDFError("document has no backing file path");
+    return inspectPdf(readFileSync(this.path));
+  }
+
+  /** Validate the embedded semantic XML (matches `aipdf validate`). */
+  validate(): boolean {
+    validateXml(this.toXml());
+    return true;
   }
 
   toXml(): string {
@@ -89,6 +110,25 @@ export function extractSemanticXml(data: Buffer): string | undefined {
   const xml = brotliDecompressSync(stream).toString("utf8");
   validateXml(xml);
   return xml;
+}
+
+/** Report PDF / semantic-layer presence and byte sizes (matches Rust `inspect_pdf`). */
+export function inspectPdf(data: Buffer): InspectReport {
+  const isPdf = data.subarray(0, 5).toString() === "%PDF-";
+  const stream = findSemanticStream(data);
+  if (!stream) return { isPdf, hasSemanticLayer: false };
+  try {
+    // Mirror Rust's decompress_semantic: sanitize (trim) then measure UTF-8 bytes.
+    const xml = sanitizeXml(brotliDecompressSync(stream).toString("utf8"));
+    return {
+      isPdf,
+      hasSemanticLayer: true,
+      semanticCompressedBytes: stream.length,
+      semanticXmlBytes: Buffer.byteLength(xml, "utf8"),
+    };
+  } catch {
+    return { isPdf, hasSemanticLayer: false, semanticCompressedBytes: stream.length };
+  }
 }
 
 export function findSemanticStream(data: Buffer): Buffer | undefined {
@@ -953,6 +993,106 @@ function htmlToXml(source: string): string {
 
   xmlParts.push(xmlDocFooter());
   return xmlParts.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// CLI-delegating write-side + image helpers.
+// The pure-JS read path needs no binary. But `build` (PDF assembly, font
+// embedding, Brotli *compression*), `ingest` (lopdf + OCR), and image
+// extraction (XObject decode + raster re-encode) are owned by the Rust core,
+// so these shell out to the installed `aipdf` binary — the same pattern the
+// MCP server uses. Set AIPDF_BIN to override the binary path (default: aipdf).
+// ---------------------------------------------------------------------------
+
+export type RenderMode = "minimal" | "full" | "browser";
+export type PageSize = "letter" | "a4";
+export type OcrMode = "auto" | "never" | "force";
+export type ExportFormat = "xml" | "markdown" | "markdown-ast" | "onto";
+
+export interface ExportResult {
+  output: string;
+  images: string[];
+}
+
+export function aipdfBinary(): string {
+  return process.env.AIPDF_BIN ?? "aipdf";
+}
+
+function runCli(args: string[]): string {
+  try {
+    return execFileSync(aipdfBinary(), args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException & { stderr?: Buffer | string; status?: number };
+    if (e.code === "ENOENT") {
+      throw new AIPDFError(
+        `aipdf CLI not found (tried '${aipdfBinary()}'); build it with \`cargo build -p aipdf-cli\` or set AIPDF_BIN to its path`,
+      );
+    }
+    const stderr = e.stderr ? e.stderr.toString().trim() : "";
+    throw new AIPDFError(stderr || `aipdf failed (exit ${e.status ?? "?"})`);
+  }
+}
+
+export interface BuildOptions {
+  output?: string;
+  render?: RenderMode;
+  pageSize?: PageSize;
+  font?: string;
+  title?: string;
+}
+
+/** Build a `.ai.pdf` from a source file (.xml/.md/.html/.typ). Returns the written path. */
+export function buildPdf(input: string, opts: BuildOptions = {}): string {
+  const args = [
+    "build", input,
+    "--render", opts.render ?? "minimal",
+    "--page-size", opts.pageSize ?? "letter",
+  ];
+  if (opts.title !== undefined) args.push("--title", opts.title);
+  if (opts.font !== undefined) args.push("--font", opts.font);
+  if (opts.output !== undefined) args.push("-o", opts.output);
+  return runCli(args).trim();
+}
+
+export interface IngestOptions {
+  output?: string;
+  ocr?: OcrMode;
+  lang?: string;
+}
+
+/** Attach a semantic layer to an existing PDF (text extraction + optional OCR). */
+export function ingest(input: string, opts: IngestOptions = {}): string {
+  const args = ["ingest", input, "--ocr", opts.ocr ?? "auto", "--lang", opts.lang ?? "eng"];
+  if (opts.output !== undefined) args.push("-o", opts.output);
+  return runCli(args).trim();
+}
+
+/** Export the semantic layer to a directory, returning the content + image paths. */
+export function exportSave(file: string, save: string, format: ExportFormat = "markdown"): ExportResult {
+  const out = runCli(["export", file, "--format", format, "--save", save]);
+  const saved = out
+    .split("\n")
+    .filter((l) => l.startsWith("saved:"))
+    .map((l) => l.slice("saved:".length).trim());
+  if (saved.length === 0) throw new AIPDFError("export --save produced no output files");
+  // First `saved:` line is the content file; the rest are extracted images.
+  return { output: saved[0], images: saved.slice(1) };
+}
+
+/** Extract embedded raster images to `outDir`, returning their paths. */
+export function extractImages(file: string, outDir: string, format: ExportFormat = "markdown"): string[] {
+  return exportSave(file, outDir, format).images;
+}
+
+/** Run `aipdf bench` and return its reported `key: value` pairs. */
+export function bench(input: string): Record<string, string> {
+  const out = runCli(["bench", input]);
+  const report: Record<string, string> = {};
+  for (const line of out.split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx > 0) report[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+  return report;
 }
 
 // ---- Typst → XML ----------------------------------------------------------

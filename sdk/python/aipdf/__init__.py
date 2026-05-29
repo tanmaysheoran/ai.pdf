@@ -2,9 +2,11 @@ from .core import (
     AIPDF,
     AIPDFDocument,
     AIPDFError,
+    InspectReport,
     SemanticBlock,
     build_from_source,
     get_reading_order,
+    inspect_pdf,
     xml_to_markdown,
     xml_to_markdown_ast_json,
     xml_to_onto,
@@ -12,19 +14,37 @@ from .core import (
     html_to_xml,
     typst_to_xml,
 )
+from .cli import (
+    ExportResult,
+    aipdf_binary,
+    bench,
+    build,
+    export,
+    extract_images,
+    ingest,
+)
 
 __all__ = [
     "AIPDF",
     "AIPDFDocument",
     "AIPDFError",
+    "InspectReport",
     "SemanticBlock",
     "build_from_source",
     "get_reading_order",
+    "inspect_pdf",
     "xml_to_markdown",
     "xml_to_markdown_ast_json",
     "xml_to_onto",
     "markdown_to_xml",
     "html_to_xml",
     "typst_to_xml",
+    # CLI-delegating write-side + image helpers
+    "ExportResult",
+    "aipdf_binary",
+    "bench",
+    "build",
+    "export",
+    "extract_images",
+    "ingest",
 ]
-

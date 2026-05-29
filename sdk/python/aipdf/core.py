@@ -45,6 +45,16 @@ class SemanticBlock:
     text: str
 
 
+@dataclass(frozen=True)
+class InspectReport:
+    """Mirror of the Rust core's `InspectReport` (pdf.rs) / `aipdf inspect`."""
+
+    is_pdf: bool
+    has_semantic_layer: bool
+    semantic_compressed_bytes: int | None
+    semantic_xml_bytes: int | None
+
+
 class AIPDF:
     @staticmethod
     def open(path: str | Path) -> "AIPDFDocument":
@@ -67,6 +77,17 @@ class AIPDFDocument:
     @property
     def has_semantic_layer(self) -> bool:
         return self.xml is not None
+
+    def inspect(self) -> InspectReport:
+        """Byte-level report matching `aipdf inspect` (re-reads the file)."""
+        if self.path is None:
+            raise AIPDFError("document has no backing file path")
+        return inspect_pdf(Path(self.path).read_bytes())
+
+    def validate(self) -> bool:
+        """Validate the embedded semantic XML (matches `aipdf validate`)."""
+        validate_xml(self.to_xml())
+        return True
 
     def to_xml(self) -> str:
         if self.xml is None:
@@ -104,6 +125,22 @@ def extract_semantic_xml(data: bytes) -> str | None:
     xml = brotli.decompress(stream).decode("utf-8")
     validate_xml(xml)
     return xml
+
+
+def inspect_pdf(data: bytes) -> InspectReport:
+    """Report PDF / semantic-layer presence and byte sizes (matches Rust `inspect_pdf`)."""
+    is_pdf = data.startswith(b"%PDF-")
+    stream = find_semantic_stream(data)
+    if stream is None:
+        return InspectReport(is_pdf, False, None, None)
+    if brotli is None:  # pragma: no cover
+        raise AIPDFError(f"brotli dependency is required: {_brotli_import_error}")
+    try:
+        # Mirror Rust's decompress_semantic: sanitize (trim) then measure UTF-8 bytes.
+        xml = sanitize_xml(brotli.decompress(stream).decode("utf-8"))
+        return InspectReport(is_pdf, True, len(stream), len(xml.encode("utf-8")))
+    except AIPDFError:
+        return InspectReport(is_pdf, False, len(stream), None)
 
 
 def find_semantic_stream(data: bytes) -> bytes | None:

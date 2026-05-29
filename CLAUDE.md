@@ -182,8 +182,10 @@ All three SDKs implement the same shape: `doc.to_onto()` (Python), `doc.toOnto()
 
 ### SDK layout
 
-- `sdk/python/` — pure Python, depends on `brotli>=1.1.0`. `xml_to_onto` uses `xml.etree.ElementTree` with a recursive `walk`. The `_onto_scalar` encoder mirrors the Rust encoder exactly. `xml_to_markdown_ast_json` (method `doc.to_markdown_ast()`) mirrors the Rust AST walker via a recursive `_ast_emit`. Public class: `AIPDF`. Also ships `aipdf.mcp_server` (MCP stdio server; `aipdf-mcp` console script).
-- `sdk/typescript/` — ESM TypeScript, no runtime deps. Uses Node's built-in `zlib` for Brotli. The read-side transforms (`xmlToMarkdown`/`xmlToMarkdownAstJson`/`xmlToOnto`/`getReadingOrder`/`collectElementText`) run on a small proper XML parser + DOM walk (`parseXml`), not regex. The AST builder (`mdNode`) emits node keys in the Rust field order and omits absent ones so `JSON.stringify` matches serde. Public class: `AIPDF`.
+- `sdk/python/` — pure Python, depends on `brotli>=1.1.0`. `xml_to_onto` uses `xml.etree.ElementTree` with a recursive `walk`. The `_onto_scalar` encoder mirrors the Rust encoder exactly. `xml_to_markdown_ast_json` (method `doc.to_markdown_ast()`) mirrors the Rust AST walker via a recursive `_ast_emit`. `inspect_pdf` / `doc.inspect()` report the same byte counts as `aipdf inspect` (compressed = stream length, xml = sanitized-then-UTF-8-encoded length). Public class: `AIPDF`. Also ships `aipdf.mcp_server` (MCP stdio server; `aipdf-mcp` console script).
+- `sdk/typescript/` — ESM TypeScript, no runtime deps. Uses Node's built-in `zlib` for Brotli. The read-side transforms (`xmlToMarkdown`/`xmlToMarkdownAstJson`/`xmlToOnto`/`getReadingOrder`/`collectElementText`) run on a small proper XML parser + DOM walk (`parseXml`), not regex. The AST builder (`mdNode`) emits node keys in the Rust field order and omits absent ones so `JSON.stringify` matches serde. `inspectPdf` / `doc.inspect()` mirror the Python/Rust byte counts. Public class: `AIPDF`.
+
+**Write-side / image parity (both SDKs):** `build`, `ingest`, image extraction, and `bench` need the Rust core (PDF assembly, font embedding, lopdf, OCR, Brotli *compression*, raster re-encode), so the SDKs **delegate to the installed `aipdf` CLI binary** rather than reimplementing them — Python `aipdf.cli` (`build`/`ingest`/`export`/`extract_images`/`bench`), TS `buildPdf`/`ingest`/`exportSave`/`extractImages`/`bench` (`node:child_process`). `AIPDF_BIN` overrides the binary path (default `aipdf`). The native read path (`open` + `to_*` transforms + `inspect`/`validate`) needs no binary. This keeps the "Rust core is authoritative" invariant: SDKs never re-derive write-side bytes.
 
 ### Cross-SDK conformance (single source of truth)
 
@@ -193,7 +195,7 @@ The `markdown-ast` exporter (MDAST-compatible JSON) is implemented in all three 
 
 ### MCP server
 
-`sdk/python/aipdf/mcp_server.py` is a dependency-free MCP stdio server (newline-delimited JSON-RPC 2.0) exposing `aipdf_inspect`, `aipdf_extract` (`onto`/`markdown`/`xml`), and `aipdf_reading_order`. Tool-level failures return `isError` results, not protocol errors. See `docs/mcp.md`.
+`sdk/python/aipdf/mcp_server.py` is an MCP stdio server (newline-delimited JSON-RPC 2.0) whose tool surface mirrors the CLI one-for-one. **Read tools (native, no binary):** `aipdf_inspect` (now includes compressed/decompressed byte counts), `aipdf_extract` (`onto`/`markdown`/`markdown-ast`/`xml`), `aipdf_reading_order`, `aipdf_validate`. **Write tools (delegate to the `aipdf` CLI via `aipdf.cli`):** `aipdf_build`, `aipdf_extract_images` (`export --save`), `aipdf_convert` (`ingest`), `aipdf_bench`. Tool-level failures return `isError` results, not protocol errors. See `docs/mcp.md`.
 
 ### Samples and schema
 
