@@ -1,8 +1,11 @@
 //! Conformance: the Rust transforms reproduce the committed golden fixtures.
-//! The Python and TypeScript SDKs assert the *same* goldens, so all three
-//! implementations are pinned to one source of truth.
+//! The Python and TypeScript SDKs assert the *same* goldens for `onto`/`markdown`,
+//! so all three implementations are pinned to one source of truth. The
+//! `markdown-ast` exporter is Rust-only (the SDKs ship no AST path), so its
+//! golden is asserted here alone — it guards the figure/image regression where
+//! self-closing `<image/>` nodes were silently dropped from the AST.
 
-use aipdf::{xml_to_markdown, xml_to_onto};
+use aipdf::{xml_to_markdown, xml_to_markdown_ast_json, xml_to_onto};
 
 fn root() -> std::path::PathBuf {
     // crates/aipdf -> repo root
@@ -46,4 +49,19 @@ fn markdown_matches_golden() {
             "Markdown mismatch for {name}"
         );
     }
+}
+
+#[test]
+fn markdown_ast_matches_golden() {
+    // `rich.xml` carries a `<figure>` with a self-closing `<image/>`, so this
+    // golden pins the image node into the AST output (regression guard).
+    let xml = case("rich");
+    let golden = read("tests/conformance/rich.ast.json");
+    let got = xml_to_markdown_ast_json(&xml);
+    assert_eq!(got.trim_end(), golden.trim_end(), "Markdown-AST mismatch");
+    // Belt-and-braces: the figure's image must survive into the AST.
+    assert!(
+        got.contains("\"type\": \"image\"") && got.contains("\"url\": \"chart.png\""),
+        "AST dropped the figure image"
+    );
 }

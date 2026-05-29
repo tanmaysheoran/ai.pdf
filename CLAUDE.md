@@ -189,6 +189,8 @@ All three SDKs implement the same shape: `doc.to_onto()` (Python), `doc.toOnto()
 
 The Rust core is authoritative. Golden ONTO/Markdown fixtures in `tests/conformance/` are generated from Rust and asserted byte-for-byte by all three implementations (`crates/aipdf/tests/conformance.rs`, `tests/conformance_python.py`, `sdk/typescript/test/conformance.test.mjs`). When changing any exporter, regenerate the goldens from Rust and confirm all three still match. The disallowed-marker lists in `security.rs`, the Python SDK, and the TS SDK are kept identical.
 
+The `markdown-ast` exporter is **Rust-only** (the Python and TS SDKs ship no AST path), so its golden (`tests/conformance/rich.ast.json`) is asserted only by the Rust conformance test. `rich.xml` carries a `<figure>`/`<image>`, so the AST golden also guards against the regression where self-closing `<image/>` nodes were dropped from the AST output.
+
 ### MCP server
 
 `sdk/python/aipdf/mcp_server.py` is a dependency-free MCP stdio server (newline-delimited JSON-RPC 2.0) exposing `aipdf_inspect`, `aipdf_extract` (`onto`/`markdown`/`xml`), and `aipdf_reading_order`. Tool-level failures return `isError` results, not protocol errors. See `docs/mcp.md`.
