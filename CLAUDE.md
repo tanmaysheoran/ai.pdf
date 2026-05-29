@@ -21,6 +21,7 @@ cargo test -p aipdf           # test core library only
 cargo run -p aipdf-cli -- build samples/minimal.xml -o samples/minimal.ai.pdf
 cargo run -p aipdf-cli -- build samples/minimal.xml --render full --page-size letter
 cargo run -p aipdf-cli -- build paper.md --render full --font /path/to/NotoSansCJK.ttf  # embed a custom face
+cargo run -p aipdf-cli -- build page.html --render browser -o page.ai.pdf  # full CSS fidelity (needs Chrome)
 
 # Ingest an existing PDF (text extraction + optional OCR), attaching a semantic layer
 cargo run -p aipdf-cli -- ingest scanned.pdf -o scanned.ai.pdf            # --ocr auto (default)
@@ -36,7 +37,6 @@ cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format xml
 cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format markdown
 cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format markdown-ast
 cargo run -p aipdf-cli -- export samples/minimal.ai.pdf --format onto
-cargo run -p aipdf-cli -- export samples/maximal.ai.pdf --format onto
 ```
 
 ### Python SDK
@@ -81,7 +81,8 @@ The workspace has two crates:
 |--------|---------------|
 | `lib.rs` | Public API: `AipdfDocument`, re-exports (`Font`, `ingest_pdf`, `SUPPORTED_MAJOR_VERSION`, …), `AipdfError` |
 | `pdf.rs` | PDF byte assembly (`build_aipdf`), Brotli compress/decompress, `extract_semantic_xml`, `inspect_pdf`. Minimal render = hand-written PDF (14 objects incl. embedded font); detection = literal byte-scan + `lopdf` structural fallback. |
-| `render.rs` | `--render full` layout engine: parses semantic XML, lays out headings/paragraphs/lists/tables/code/figures, records per-block page+bbox, embeds raster images, then assembles the PDF object tree. Writes the laid-out coordinates back into the embedded XML before compression. |
+| `render.rs` | `--render full` layout engine: parses semantic XML, lays out headings/paragraphs/lists/tables/code/figures, records per-block page+bbox, embeds raster images, then assembles the PDF object tree. Writes the laid-out coordinates back into the embedded XML before compression. Self-contained; ignores CSS. |
+| `browser.rs` | `--render browser` (HTML input only): renders the original HTML — stylesheet and all — to a PDF with **headless Chrome** (shelled out, like `ingest`'s tesseract), then attaches the semantic layer to that PDF via `ingest::attach_semantic_layer`. Gives full CSS fidelity (colours, backgrounds, borders, web fonts, table striping) at the cost of a Chrome/Chromium runtime dependency. `chrome_available()` reports presence; `AIPDF_CHROME` overrides the binary path. The visible layer is the browser's; the embedded XML stays semantic (no per-block bbox write-back on this path). |
 | `font.rs` | Embedded CID/Type0 TrueType font support (Identity-H + ToUnicode + per-glyph widths). Vendors `assets/DejaVuSans.ttf` as the default face; `Font::from_path` loads a custom (e.g. CJK) face. Used by both renderers so non-ASCII survives in the visible layer. |
 | `ingest.rs` | `ingest_pdf` — parse an existing PDF with `lopdf`, extract text per page (OCR fallback via the `tesseract` CLI for scanned pages), and attach the semantic layer to the **original** document. `IngestOptions { ocr: OcrMode, lang }`. |
 | `xml.rs` | XML validation + version negotiation (`check_supported_version`, accepts `1.x`), `get_reading_order` → `Vec<SemanticBlock>`, `get_tables`, `find_citations`, `SUPPORTED_MAJOR_VERSION` |
@@ -103,6 +104,8 @@ Input (XML/MD/HTML/Typst)
       • minimal: Brotli compress → embed in hand-written PDF (font embedded)
       • full:    render::build_rendered_pdf → lay out + record page/bbox →
                  write coords back into XML → Brotli compress → embed (+ images)
+      • browser: (HTML only) browser::build_aipdf_browser → headless Chrome
+                 renders HTML+CSS → PDF → attach semantic layer via lopdf
   → .ai.pdf file
 
 Existing PDF
@@ -120,7 +123,7 @@ Existing PDF
 
 | Option | Values | Default |
 |--------|--------|---------|
-| `--render` | `minimal` (plain text, fast), `full` (laid-out PDF with headings, tables, code blocks, images) | `minimal` |
+| `--render` | `minimal` (plain text, fast), `full` (laid-out PDF with headings, tables, code blocks, images), `browser` (HTML input only — full CSS fidelity via headless Chrome) | `minimal` |
 | `--page-size` | `letter`, `a4` | `letter` |
 | `--font` | path to a TrueType face to embed (e.g. a Noto CJK font) | bundled DejaVu Sans |
 
@@ -175,20 +178,24 @@ ONTO is a derived, export-only columnar format for LLM ingestion — it is never
 - Strings containing newlines or leading/trailing spaces are backtick-wrapped.
 - Table `rows` field is pre-serialized as `cell1^cell2|cell1^cell2` and emitted via `column_raw` (not re-encoded).
 
-All three SDKs implement the same shape: `doc.to_onto()` (Python), `doc.toOnto()` (TypeScript), `AipdfDocument::to_onto()` (Rust).
+All three SDKs implement the same shape: `doc.to_onto()` (Python), `doc.toOnto()` (TypeScript), `AipdfDocument::to_onto()` (Rust). The MDAST exporter is likewise mirrored: `doc.to_markdown_ast()` (Python), `doc.toMarkdownAst()` (TypeScript), `xml_to_markdown_ast_json` (Rust core / CLI `export --format markdown-ast`).
 
 ### SDK layout
 
-- `sdk/python/` — pure Python, depends on `brotli>=1.1.0`. `xml_to_onto` uses `xml.etree.ElementTree` with a recursive `walk`. The `_onto_scalar` encoder mirrors the Rust encoder exactly. Public class: `AIPDF`. Also ships `aipdf.mcp_server` (MCP stdio server; `aipdf-mcp` console script).
-- `sdk/typescript/` — ESM TypeScript, no runtime deps. Uses Node's built-in `zlib` for Brotli. The read-side transforms (`xmlToMarkdown`/`xmlToOnto`/`getReadingOrder`/`collectElementText`) run on a small proper XML parser + DOM walk (`parseXml`), not regex. Public class: `AIPDF`.
+- `sdk/python/` — pure Python, depends on `brotli>=1.1.0`. `xml_to_onto` uses `xml.etree.ElementTree` with a recursive `walk`. The `_onto_scalar` encoder mirrors the Rust encoder exactly. `xml_to_markdown_ast_json` (method `doc.to_markdown_ast()`) mirrors the Rust AST walker via a recursive `_ast_emit`. `inspect_pdf` / `doc.inspect()` report the same byte counts as `aipdf inspect` (compressed = stream length, xml = sanitized-then-UTF-8-encoded length). Public class: `AIPDF`. Also ships `aipdf.mcp_server` (MCP stdio server; `aipdf-mcp` console script).
+- `sdk/typescript/` — ESM TypeScript, no runtime deps. Uses Node's built-in `zlib` for Brotli. The read-side transforms (`xmlToMarkdown`/`xmlToMarkdownAstJson`/`xmlToOnto`/`getReadingOrder`/`collectElementText`) run on a small proper XML parser + DOM walk (`parseXml`), not regex. The AST builder (`mdNode`) emits node keys in the Rust field order and omits absent ones so `JSON.stringify` matches serde. `inspectPdf` / `doc.inspect()` mirror the Python/Rust byte counts. Public class: `AIPDF`.
+
+**Write-side / image parity (both SDKs):** `build`, `ingest`, image extraction, and `bench` need the Rust core (PDF assembly, font embedding, lopdf, OCR, Brotli *compression*, raster re-encode), so the SDKs **delegate to the installed `aipdf` CLI binary** rather than reimplementing them — Python `aipdf.cli` (`build`/`ingest`/`export`/`extract_images`/`bench`), TS `buildPdf`/`ingest`/`exportSave`/`extractImages`/`bench` (`node:child_process`). `AIPDF_BIN` overrides the binary path (default `aipdf`). The native read path (`open` + `to_*` transforms + `inspect`/`validate`) needs no binary. This keeps the "Rust core is authoritative" invariant: SDKs never re-derive write-side bytes.
 
 ### Cross-SDK conformance (single source of truth)
 
 The Rust core is authoritative. Golden ONTO/Markdown fixtures in `tests/conformance/` are generated from Rust and asserted byte-for-byte by all three implementations (`crates/aipdf/tests/conformance.rs`, `tests/conformance_python.py`, `sdk/typescript/test/conformance.test.mjs`). When changing any exporter, regenerate the goldens from Rust and confirm all three still match. The disallowed-marker lists in `security.rs`, the Python SDK, and the TS SDK are kept identical.
 
+The `markdown-ast` exporter (MDAST-compatible JSON) is implemented in all three SDKs — `xml_to_markdown_ast_json` (Rust core + Python SDK), `xmlToMarkdownAstJson` (TS SDK) — and its golden (`tests/conformance/rich.ast.json`) is asserted by all three harnesses. Node objects are emitted in the Rust struct's field order (`type, value, depth, lang, ordered, url, alt, children`) with absent fields omitted, so the pretty JSON is byte-for-byte identical across `serde_json`, Python `json.dumps(ensure_ascii=False)`, and JS `JSON.stringify`. `rich.xml` carries a `<figure>`/`<image>`, so the AST golden also guards against the regression where self-closing `<image/>` nodes were dropped from the AST output.
+
 ### MCP server
 
-`sdk/python/aipdf/mcp_server.py` is a dependency-free MCP stdio server (newline-delimited JSON-RPC 2.0) exposing `aipdf_inspect`, `aipdf_extract` (`onto`/`markdown`/`xml`), and `aipdf_reading_order`. Tool-level failures return `isError` results, not protocol errors. See `docs/mcp.md`.
+`sdk/python/aipdf/mcp_server.py` is an MCP stdio server (newline-delimited JSON-RPC 2.0) whose tool surface mirrors the CLI one-for-one. **Read tools (native, no binary):** `aipdf_inspect` (now includes compressed/decompressed byte counts), `aipdf_extract` (`onto`/`markdown`/`markdown-ast`/`xml`), `aipdf_reading_order`, `aipdf_validate`. **Write tools (delegate to the `aipdf` CLI via `aipdf.cli`):** `aipdf_build`, `aipdf_extract_images` (`export --save`), `aipdf_convert` (`ingest`), `aipdf_bench`. Tool-level failures return `isError` results, not protocol errors. See `docs/mcp.md`.
 
 ### Samples and schema
 

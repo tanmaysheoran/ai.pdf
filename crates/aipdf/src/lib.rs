@@ -1,3 +1,4 @@
+mod browser;
 pub(crate) mod font;
 mod ingest;
 mod markdown;
@@ -8,12 +9,14 @@ mod security;
 mod source;
 mod xml;
 
+pub use browser::{build_aipdf_browser, chrome_available};
 pub use font::Font;
 pub use ingest::{ingest_pdf, IngestOptions, OcrMode};
 pub use markdown::{xml_to_markdown, xml_to_markdown_ast_json};
 pub use onto::xml_to_onto;
 pub use pdf::{
-    build_aipdf, extract_semantic_xml, inspect_pdf, BuildOptions, InspectReport, RenderMode,
+    build_aipdf, extract_images, extract_semantic_xml, inspect_pdf, BuildOptions, ImageExtract,
+    InspectReport, RenderMode,
 };
 pub use render::PageOptions;
 pub use security::sanitize_xml;

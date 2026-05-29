@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { brotliDecompressSync } from "node:zlib";
+import { execFileSync } from "node:child_process";
 
 // Conformant PDF name for MIME application/aipdf+xml+br ('/' escaped as #2F).
 const SEMANTIC_SUBTYPE = Buffer.from("/application#2Faipdf+xml+br");
@@ -22,6 +23,14 @@ export interface SemanticBlock {
   page?: number;
   bbox?: string;
   text: string;
+}
+
+/** Mirror of the Rust core's `InspectReport` (pdf.rs) / `aipdf inspect`. */
+export interface InspectReport {
+  isPdf: boolean;
+  hasSemanticLayer: boolean;
+  semanticCompressedBytes?: number;
+  semanticXmlBytes?: number;
 }
 
 export class AIPDFError extends Error {}
@@ -49,6 +58,18 @@ export class AIPDFDocument {
     return this.xml !== undefined;
   }
 
+  /** Byte-level report matching `aipdf inspect` (re-reads the backing file). */
+  inspect(): InspectReport {
+    if (this.path === undefined) throw new AIPDFError("document has no backing file path");
+    return inspectPdf(readFileSync(this.path));
+  }
+
+  /** Validate the embedded semantic XML (matches `aipdf validate`). */
+  validate(): boolean {
+    validateXml(this.toXml());
+    return true;
+  }
+
   toXml(): string {
     if (!this.xml) throw new AIPDFError("semantic layer not found");
     return this.xml;
@@ -60,6 +81,10 @@ export class AIPDFDocument {
 
   toMarkdown(): string {
     return xmlToMarkdown(this.toXml());
+  }
+
+  toMarkdownAst(): string {
+    return xmlToMarkdownAstJson(this.toXml());
   }
 
   toOnto(): string {
@@ -85,6 +110,25 @@ export function extractSemanticXml(data: Buffer): string | undefined {
   const xml = brotliDecompressSync(stream).toString("utf8");
   validateXml(xml);
   return xml;
+}
+
+/** Report PDF / semantic-layer presence and byte sizes (matches Rust `inspect_pdf`). */
+export function inspectPdf(data: Buffer): InspectReport {
+  const isPdf = data.subarray(0, 5).toString() === "%PDF-";
+  const stream = findSemanticStream(data);
+  if (!stream) return { isPdf, hasSemanticLayer: false };
+  try {
+    // Mirror Rust's decompress_semantic: sanitize (trim) then measure UTF-8 bytes.
+    const xml = sanitizeXml(brotliDecompressSync(stream).toString("utf8"));
+    return {
+      isPdf,
+      hasSemanticLayer: true,
+      semanticCompressedBytes: stream.length,
+      semanticXmlBytes: Buffer.byteLength(xml, "utf8"),
+    };
+  } catch {
+    return { isPdf, hasSemanticLayer: false, semanticCompressedBytes: stream.length };
+  }
 }
 
 export function findSemanticStream(data: Buffer): Buffer | undefined {
@@ -362,6 +406,139 @@ function renderTable(table: XmlNode, lines: string[]): void {
   lines.push(`| ${rows[0].map(() => "---").join(" | ")} |`);
   for (const row of rows.slice(1)) lines.push(`| ${row.join(" | ")} |`);
   lines.push("");
+}
+
+// --- Markdown AST (MDAST) export --------------------------------------------
+// Mirrors the Rust core's streaming walker (`xml_to_markdown_ast` in
+// markdown.rs) so the JSON is byte-for-byte identical. `mdNode` emits keys in
+// the Rust struct's field order (type, value, depth, lang, ordered, url, alt,
+// children) and omits absent ones, matching serde's `skip_serializing_if`;
+// `JSON.stringify(_, null, 2)` then matches serde_json's pretty output (raw
+// UTF-8, 2-space indent).
+
+interface MdastNode {
+  type: string;
+  value?: string;
+  depth?: number;
+  lang?: string;
+  ordered?: boolean;
+  url?: string;
+  alt?: string;
+  children?: MdastNode[];
+}
+
+function mdNode(fields: MdastNode): MdastNode {
+  const node: MdastNode = { type: fields.type };
+  if (fields.value !== undefined) node.value = fields.value;
+  if (fields.depth !== undefined) node.depth = fields.depth;
+  if (fields.lang !== undefined) node.lang = fields.lang;
+  if (fields.ordered !== undefined) node.ordered = fields.ordered;
+  if (fields.url !== undefined) node.url = fields.url;
+  if (fields.alt !== undefined) node.alt = fields.alt;
+  if (fields.children !== undefined && fields.children.length > 0) node.children = fields.children;
+  return node;
+}
+
+// Rust concatenates each trimmed text run (no internal whitespace
+// normalization), unlike `textOf`. For single-run elements they coincide.
+function astText(node: XmlNode): string {
+  let acc = "";
+  const visit = (nd: XmlNode) => {
+    if (nd.tag === "#text") acc += (nd.value ?? "").trim();
+    else nd.children.forEach(visit);
+  };
+  visit(node);
+  return acc;
+}
+
+const astTextNode = (value: string): MdastNode => mdNode({ type: "text", value });
+const astHeading = (depth: number, value: string): MdastNode =>
+  mdNode({ type: "heading", depth: Math.min(Math.max(depth, 1), 6), children: [astTextNode(value)] });
+const astParagraph = (value: string): MdastNode => mdNode({ type: "paragraph", children: [astTextNode(value)] });
+const astImageParagraph = (src: string, alt: string): MdastNode =>
+  mdNode({ type: "paragraph", children: [mdNode({ type: "image", url: src, alt })] });
+const astBlockquote = (value: string): MdastNode => mdNode({ type: "blockquote", children: [astParagraph(value)] });
+const astListItem = (value: string): MdastNode => mdNode({ type: "listItem", children: [astParagraph(value)] });
+const astValue = (type: string, value: string, lang?: string): MdastNode => mdNode({ type, value, lang });
+const astTable = (rows: string[][]): MdastNode =>
+  mdNode({
+    type: "table",
+    children: rows.map((row) =>
+      mdNode({ type: "tableRow", children: row.map((cell) => mdNode({ type: "tableCell", children: [astTextNode(cell)] })) })),
+  });
+
+function astEmit(elem: XmlNode, out: MdastNode[], state: { level: number }): void {
+  for (const child of elementChildren(elem)) {
+    switch (child.tag) {
+      case "section": {
+        const lvl = parseInt(child.attrs.level ?? "", 10);
+        state.level = Number.isNaN(lvl) ? 1 : lvl;
+        astEmit(child, out, state);
+        break;
+      }
+      case "title":
+        out.push(astHeading(state.level, astText(child)));
+        break;
+      case "paragraph":
+      case "caption":
+        out.push(astParagraph(astText(child)));
+        break;
+      case "citation":
+        out.push(astBlockquote(astText(child)));
+        break;
+      case "equation":
+        out.push(astValue("math", astText(child)));
+        break;
+      case "codeBlock":
+        out.push(astValue("code", astText(child), child.attrs.language));
+        break;
+      case "note":
+        out.push(astBlockquote(`Note: ${astText(child)}`));
+        break;
+      case "footnote":
+        out.push(mdNode({ type: "footnoteDefinition", children: [astParagraph(astText(child))] }));
+        break;
+      case "image":
+        out.push(astImageParagraph(child.attrs.src ?? "", child.attrs.alt ?? ""));
+        break;
+      case "list":
+      case "references":
+      case "definitionList": {
+        const items: MdastNode[] = [];
+        for (const sub of elementChildren(child)) {
+          if (sub.tag === "item" || sub.tag === "reference") items.push(astListItem(astText(sub)));
+          else if (sub.tag === "definition") {
+            const term = sub.attrs.term ?? "";
+            items.push(astListItem(term ? `${term}: ${astText(sub)}` : astText(sub)));
+          }
+        }
+        out.push(mdNode({ type: "list", ordered: false, children: items }));
+        break;
+      }
+      case "table": {
+        const cap = findChild(child, "caption");
+        if (cap) out.push(astParagraph(astText(cap)));
+        const rows: string[][] = [];
+        for (const row of iterElements(child))
+          if (row.tag === "row") rows.push(elementChildren(row).filter((c) => c.tag === "cell").map(astText));
+        out.push(astTable(rows));
+        break;
+      }
+      default:
+        astEmit(child, out, state);
+    }
+  }
+}
+
+export function xmlToMarkdownAst(xml: string): MdastNode {
+  const root = parseXml(sanitizeXml(xml));
+  const children: MdastNode[] = [];
+  astEmit(root, children, { level: 1 });
+  return { type: "root", children };
+}
+
+export function xmlToMarkdownAstJson(xml: string): string {
+  return JSON.stringify(xmlToMarkdownAst(xml), null, 2);
 }
 
 function stripTags(input: string): string {
@@ -816,6 +993,106 @@ function htmlToXml(source: string): string {
 
   xmlParts.push(xmlDocFooter());
   return xmlParts.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// CLI-delegating write-side + image helpers.
+// The pure-JS read path needs no binary. But `build` (PDF assembly, font
+// embedding, Brotli *compression*), `ingest` (lopdf + OCR), and image
+// extraction (XObject decode + raster re-encode) are owned by the Rust core,
+// so these shell out to the installed `aipdf` binary — the same pattern the
+// MCP server uses. Set AIPDF_BIN to override the binary path (default: aipdf).
+// ---------------------------------------------------------------------------
+
+export type RenderMode = "minimal" | "full" | "browser";
+export type PageSize = "letter" | "a4";
+export type OcrMode = "auto" | "never" | "force";
+export type ExportFormat = "xml" | "markdown" | "markdown-ast" | "onto";
+
+export interface ExportResult {
+  output: string;
+  images: string[];
+}
+
+export function aipdfBinary(): string {
+  return process.env.AIPDF_BIN ?? "aipdf";
+}
+
+function runCli(args: string[]): string {
+  try {
+    return execFileSync(aipdfBinary(), args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException & { stderr?: Buffer | string; status?: number };
+    if (e.code === "ENOENT") {
+      throw new AIPDFError(
+        `aipdf CLI not found (tried '${aipdfBinary()}'); build it with \`cargo build -p aipdf-cli\` or set AIPDF_BIN to its path`,
+      );
+    }
+    const stderr = e.stderr ? e.stderr.toString().trim() : "";
+    throw new AIPDFError(stderr || `aipdf failed (exit ${e.status ?? "?"})`);
+  }
+}
+
+export interface BuildOptions {
+  output?: string;
+  render?: RenderMode;
+  pageSize?: PageSize;
+  font?: string;
+  title?: string;
+}
+
+/** Build a `.ai.pdf` from a source file (.xml/.md/.html/.typ). Returns the written path. */
+export function buildPdf(input: string, opts: BuildOptions = {}): string {
+  const args = [
+    "build", input,
+    "--render", opts.render ?? "minimal",
+    "--page-size", opts.pageSize ?? "letter",
+  ];
+  if (opts.title !== undefined) args.push("--title", opts.title);
+  if (opts.font !== undefined) args.push("--font", opts.font);
+  if (opts.output !== undefined) args.push("-o", opts.output);
+  return runCli(args).trim();
+}
+
+export interface IngestOptions {
+  output?: string;
+  ocr?: OcrMode;
+  lang?: string;
+}
+
+/** Attach a semantic layer to an existing PDF (text extraction + optional OCR). */
+export function ingest(input: string, opts: IngestOptions = {}): string {
+  const args = ["ingest", input, "--ocr", opts.ocr ?? "auto", "--lang", opts.lang ?? "eng"];
+  if (opts.output !== undefined) args.push("-o", opts.output);
+  return runCli(args).trim();
+}
+
+/** Export the semantic layer to a directory, returning the content + image paths. */
+export function exportSave(file: string, save: string, format: ExportFormat = "markdown"): ExportResult {
+  const out = runCli(["export", file, "--format", format, "--save", save]);
+  const saved = out
+    .split("\n")
+    .filter((l) => l.startsWith("saved:"))
+    .map((l) => l.slice("saved:".length).trim());
+  if (saved.length === 0) throw new AIPDFError("export --save produced no output files");
+  // First `saved:` line is the content file; the rest are extracted images.
+  return { output: saved[0], images: saved.slice(1) };
+}
+
+/** Extract embedded raster images to `outDir`, returning their paths. */
+export function extractImages(file: string, outDir: string, format: ExportFormat = "markdown"): string[] {
+  return exportSave(file, outDir, format).images;
+}
+
+/** Run `aipdf bench` and return its reported `key: value` pairs. */
+export function bench(input: string): Record<string, string> {
+  const out = runCli(["bench", input]);
+  const report: Record<string, string> = {};
+  for (const line of out.split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx > 0) report[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+  return report;
 }
 
 // ---- Typst → XML ----------------------------------------------------------

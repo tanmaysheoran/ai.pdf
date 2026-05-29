@@ -6,6 +6,9 @@ use crate::{
     AipdfError, Result,
 };
 use brotli::{CompressorReader, Decompressor};
+use flate2::read::ZlibDecoder;
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use sha2::{Digest, Sha256};
 use std::io::Read;
 
@@ -109,6 +112,367 @@ pub fn inspect_pdf(bytes: &[u8]) -> InspectReport {
 pub fn extract_semantic_xml(bytes: &[u8]) -> Result<String> {
     let compressed = find_semantic_compressed(bytes).ok_or(AipdfError::SemanticLayerNotFound)?;
     decompress_semantic(&compressed)
+}
+
+/// The pixel data backing an [`ImageExtract`], in whatever form the source
+/// XObject provided it. RGB/Gray variants are decoded raw samples (8 bits per
+/// component, row-major, no padding); `Jpeg` is an already-encoded DCTDecode
+/// stream written through verbatim with no re-encoding.
+#[derive(Debug, Clone)]
+pub enum ImagePayload {
+    Rgb8(Vec<u8>),
+    Gray8(Vec<u8>),
+    Jpeg(Vec<u8>),
+}
+
+/// A raster image extracted from the PDF's embedded XObjects, correlated with
+/// its original `src` and `alt` attributes from the semantic XML.
+#[derive(Debug, Clone)]
+pub struct ImageExtract {
+    /// Original `src` attribute from the semantic XML (e.g. `"1.jpg"`).
+    pub src: String,
+    /// `alt` attribute from the semantic XML.
+    pub alt: String,
+    pub width: u32,
+    pub height: u32,
+    /// Decoded pixels (or passthrough JPEG bytes) for this image.
+    pub payload: ImagePayload,
+}
+
+impl ImageExtract {
+    /// Save the image to `dir/self.src`, creating parent directories as needed.
+    /// Decoded RGB/Gray pixels are encoded from the filename extension (`.jpg`
+    /// → JPEG, `.png` → PNG, etc.); `Jpeg` payloads are written verbatim.
+    pub fn save_to(&self, dir: &std::path::Path) -> Result<std::path::PathBuf> {
+        use image::{ImageBuffer, Luma, Rgb};
+        let dest = dir.join(&self.src);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(AipdfError::Io)?;
+        }
+        let dim_err =
+            || AipdfError::InvalidXml("image dimensions do not match pixel data length".into());
+        let enc_err = |e: image::ImageError| {
+            AipdfError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        };
+        match &self.payload {
+            // Already-encoded JPEG from a DCTDecode stream — the bytes are a
+            // complete JPEG file, so write them straight through (no re-encode).
+            ImagePayload::Jpeg(bytes) => std::fs::write(&dest, bytes).map_err(AipdfError::Io)?,
+            ImagePayload::Rgb8(px) => {
+                let img = ImageBuffer::<Rgb<u8>, _>::from_raw(self.width, self.height, px.clone())
+                    .ok_or_else(dim_err)?;
+                img.save(&dest).map_err(enc_err)?;
+            }
+            ImagePayload::Gray8(px) => {
+                let img = ImageBuffer::<Luma<u8>, _>::from_raw(self.width, self.height, px.clone())
+                    .ok_or_else(dim_err)?;
+                img.save(&dest).map_err(enc_err)?;
+            }
+        }
+        Ok(dest)
+    }
+}
+
+/// Extract raster images embedded in an AIPDF file (both `--render full` and
+/// `--render browser`, which Chrome emits as the same `/Im{n}` Image XObjects).
+///
+/// Image refs are de-duplicated by `src` first: two figures pointing at the
+/// same file (e.g. an `<img>` and a CSS background of `1.jpg`) yield one
+/// extracted file rather than overwriting each other on disk. Each unique src
+/// is then matched positionally to the *n*-th sorted XObject — the best
+/// heuristic available, since a Chrome PDF carries no `<img>`→XObject mapping.
+/// If the counts differ, only the matched prefix is returned; images whose
+/// encoding we cannot decode safely are skipped with a note instead of being
+/// written corrupt.
+pub fn extract_images(bytes: &[u8]) -> Result<Vec<ImageExtract>> {
+    let xml = extract_semantic_xml(bytes)?;
+    let xml_images = parse_image_refs(&xml);
+    if xml_images.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // De-duplicate by src, preserving first-seen order.
+    let mut unique: Vec<(String, String)> = Vec::new();
+    let mut seen_src = std::collections::HashSet::new();
+    for (src, alt) in xml_images {
+        if seen_src.insert(src.clone()) {
+            unique.push((src, alt));
+        }
+    }
+
+    let doc = lopdf::Document::load_mem(bytes).map_err(|e| AipdfError::Pdf(e.to_string()))?;
+    let xobjects = collect_image_xobjects(&doc);
+
+    let count = unique.len().min(xobjects.len());
+    let mut result = Vec::with_capacity(count);
+    for i in 0..count {
+        let (src, alt) = &unique[i];
+        let xo = &xobjects[i];
+        match decode_xobject(xo) {
+            Some(payload) => result.push(ImageExtract {
+                src: src.clone(),
+                alt: alt.clone(),
+                width: xo.width,
+                height: xo.height,
+                payload,
+            }),
+            None => eprintln!(
+                "note: skipping image '{src}' — unsupported XObject encoding (colorspace/bit-depth/predictor not decodable)"
+            ),
+        }
+    }
+    Ok(result)
+}
+
+/// Decode a collected XObject into a savable payload, or `None` if its encoding
+/// is one we don't handle (so the caller can skip rather than emit garbage).
+fn decode_xobject(xo: &RawXObject) -> Option<ImagePayload> {
+    match xo.filter {
+        // DCTDecode streams are complete JPEG files — pass through untouched.
+        ImgFilter::Dct => Some(ImagePayload::Jpeg(xo.content.clone())),
+        ImgFilter::Flate => {
+            if xo.bits != 8 {
+                return None;
+            }
+            // We don't undo PNG/TIFF predictors; refuse rather than corrupt.
+            if matches!(xo.predictor, Some(p) if p >= 2) {
+                return None;
+            }
+            let mut raw = Vec::new();
+            ZlibDecoder::new(xo.content.as_slice())
+                .read_to_end(&mut raw)
+                .ok()?;
+            let px = xo.width as usize * xo.height as usize;
+            match xo.color {
+                ColorKind::Rgb => {
+                    let need = px.checked_mul(3)?;
+                    if raw.len() < need {
+                        return None;
+                    }
+                    raw.truncate(need);
+                    Some(ImagePayload::Rgb8(raw))
+                }
+                ColorKind::Gray => {
+                    if raw.len() < px {
+                        return None;
+                    }
+                    raw.truncate(px);
+                    Some(ImagePayload::Gray8(raw))
+                }
+                ColorKind::Other => None,
+            }
+        }
+    }
+}
+
+fn parse_image_refs(xml: &str) -> Vec<(String, String)> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut images = Vec::new();
+    loop {
+        match reader.read_event() {
+            Ok(Event::Empty(e)) if e.name().as_ref() == b"image" => {
+                let mut src = String::new();
+                let mut alt = String::new();
+                for attr in e.attributes().flatten() {
+                    match attr.key.as_ref() {
+                        b"src" => src = String::from_utf8_lossy(attr.value.as_ref()).into_owned(),
+                        b"alt" => alt = String::from_utf8_lossy(attr.value.as_ref()).into_owned(),
+                        _ => {}
+                    }
+                }
+                if !src.is_empty() {
+                    images.push((src, alt));
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    images
+}
+
+/// The image codec on an Image XObject — the only two we extract.
+#[derive(Debug, Clone, Copy)]
+enum ImgFilter {
+    Flate,
+    Dct,
+}
+
+/// Coarse colorspace classification sufficient to pick a pixel encoder.
+#[derive(Debug, Clone, Copy)]
+enum ColorKind {
+    Rgb,
+    Gray,
+    Other,
+}
+
+/// An Image XObject collected from a page, with the metadata needed to decode
+/// its stream correctly. `content` is the raw (still filter-encoded) stream.
+#[derive(Debug, Clone)]
+struct RawXObject {
+    width: u32,
+    height: u32,
+    filter: ImgFilter,
+    color: ColorKind,
+    bits: u32,
+    predictor: Option<i64>,
+    content: Vec<u8>,
+}
+
+fn collect_image_xobjects(doc: &lopdf::Document) -> Vec<RawXObject> {
+    use lopdf::Object;
+    use std::collections::BTreeMap;
+
+    let mut seen: BTreeMap<String, RawXObject> = BTreeMap::new();
+    for (_page_num, page_id) in doc.get_pages() {
+        let Ok((Some(resources), _)) = doc.get_page_resources(page_id) else {
+            continue;
+        };
+        let Some(xobjects) = resources
+            .get(b"XObject")
+            .ok()
+            .and_then(|o| o.as_dict().ok())
+        else {
+            continue;
+        };
+        for (name_bytes, obj) in xobjects.iter() {
+            let name = String::from_utf8_lossy(name_bytes).into_owned();
+            if seen.contains_key(&name) {
+                continue;
+            }
+            let Ok(id) = obj.as_reference() else { continue };
+            let Ok(Object::Stream(s)) = doc.get_object(id) else {
+                continue;
+            };
+            let is_image = s.dict.get(b"Subtype").ok().and_then(|o| o.as_name().ok())
+                == Some(b"Image".as_ref());
+            if !is_image {
+                continue;
+            }
+            let Some(filter) = s
+                .dict
+                .get(b"Filter")
+                .ok()
+                .or_else(|| s.dict.get(b"F").ok())
+                .and_then(filter_kind)
+            else {
+                continue;
+            };
+            let Ok(w) = s.dict.get(b"Width").and_then(|o| o.as_i64()) else {
+                continue;
+            };
+            let Ok(h) = s.dict.get(b"Height").and_then(|o| o.as_i64()) else {
+                continue;
+            };
+            let bits = s
+                .dict
+                .get(b"BitsPerComponent")
+                .and_then(|o| o.as_i64())
+                .unwrap_or(8);
+            let color = s
+                .dict
+                .get(b"ColorSpace")
+                .ok()
+                .or_else(|| s.dict.get(b"CS").ok())
+                .map(|cs| color_kind(doc, cs))
+                .unwrap_or(ColorKind::Other);
+            let predictor = predictor_of(
+                s.dict
+                    .get(b"DecodeParms")
+                    .ok()
+                    .or_else(|| s.dict.get(b"DP").ok()),
+            );
+            seen.insert(
+                name,
+                RawXObject {
+                    width: w as u32,
+                    height: h as u32,
+                    filter,
+                    color,
+                    bits: bits as u32,
+                    predictor,
+                    content: s.content.clone(),
+                },
+            );
+        }
+    }
+
+    // Sort by numeric suffix so Im1 < Im2 < Im10 (not lexicographic).
+    let mut entries: Vec<(String, RawXObject)> = seen.into_iter().collect();
+    entries.sort_by_key(|(name, _)| {
+        name.strip_prefix("Im")
+            .and_then(|n| n.parse::<u32>().ok())
+            .unwrap_or(u32::MAX)
+    });
+    entries.into_iter().map(|(_, v)| v).collect()
+}
+
+/// Classify the image codec from a `/Filter` value (name, or array whose last
+/// entry is the image codec). Returns `None` for codecs we don't extract.
+fn filter_kind(obj: &lopdf::Object) -> Option<ImgFilter> {
+    use lopdf::Object;
+    let name = match obj {
+        Object::Name(n) => n.clone(),
+        Object::Array(a) => match a.last() {
+            Some(Object::Name(n)) => n.clone(),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    match name.as_slice() {
+        b"FlateDecode" | b"Fl" => Some(ImgFilter::Flate),
+        b"DCTDecode" | b"DCT" => Some(ImgFilter::Dct),
+        _ => None,
+    }
+}
+
+/// Classify a `/ColorSpace` into RGB / Gray / Other, resolving references and
+/// `[/ICCBased <stream>]` (by the stream's `/N` component count).
+fn color_kind(doc: &lopdf::Document, cs: &lopdf::Object) -> ColorKind {
+    use lopdf::Object;
+    let resolved = match cs {
+        Object::Reference(r) => match doc.get_object(*r) {
+            Ok(o) => o,
+            Err(_) => return ColorKind::Other,
+        },
+        other => other,
+    };
+    match resolved {
+        Object::Name(n) => match n.as_slice() {
+            b"DeviceRGB" | b"CalRGB" | b"RGB" => ColorKind::Rgb,
+            b"DeviceGray" | b"CalGray" | b"G" => ColorKind::Gray,
+            _ => ColorKind::Other,
+        },
+        Object::Array(a) => {
+            if let Some(Object::Name(n)) = a.first() {
+                if n.as_slice() == b"ICCBased" {
+                    if let Some(r) = a.get(1).and_then(|o| o.as_reference().ok()) {
+                        if let Ok(Object::Stream(s)) = doc.get_object(r) {
+                            return match s.dict.get(b"N").and_then(|o| o.as_i64()) {
+                                Ok(3) => ColorKind::Rgb,
+                                Ok(1) => ColorKind::Gray,
+                                _ => ColorKind::Other,
+                            };
+                        }
+                    }
+                }
+            }
+            ColorKind::Other
+        }
+        _ => ColorKind::Other,
+    }
+}
+
+/// Read a `/Predictor` from `/DecodeParms` (a dict, or array of dicts).
+fn predictor_of(obj: Option<&lopdf::Object>) -> Option<i64> {
+    use lopdf::Object;
+    let dict = match obj? {
+        Object::Dictionary(d) => d,
+        Object::Array(a) => a.iter().find_map(|x| x.as_dict().ok())?,
+        _ => return None,
+    };
+    dict.get(b"Predictor").ok().and_then(|p| p.as_i64().ok())
 }
 
 fn decompress_semantic(compressed: &[u8]) -> Result<String> {

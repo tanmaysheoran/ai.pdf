@@ -21,6 +21,10 @@ messages = [
      "params": {"name": "aipdf_extract", "arguments": {"path": str(SAMPLE), "format": "onto"}}},
     {"jsonrpc": "2.0", "id": 5, "method": "tools/call",
      "params": {"name": "aipdf_extract", "arguments": {"path": "/no/such/file.pdf"}}},
+    {"jsonrpc": "2.0", "id": 6, "method": "tools/call",
+     "params": {"name": "aipdf_validate", "arguments": {"path": str(SAMPLE)}}},
+    {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+     "params": {"name": "aipdf_extract", "arguments": {"path": str(SAMPLE), "format": "markdown-ast"}}},
 ]
 stdin_data = "".join(json.dumps(m) + "\n" for m in messages)
 
@@ -43,15 +47,20 @@ assert init["serverInfo"]["name"] == "aipdf"
 assert "tools" in init["capabilities"]
 print("OK initialize")
 
-# tools/list
+# tools/list — full CLI-parity surface
 tools = {t["name"] for t in responses[2]["result"]["tools"]}
-assert {"aipdf_inspect", "aipdf_extract", "aipdf_reading_order"} <= tools, tools
+expected = {
+    "aipdf_inspect", "aipdf_extract", "aipdf_reading_order", "aipdf_validate",
+    "aipdf_build", "aipdf_extract_images", "aipdf_convert", "aipdf_bench",
+}
+assert expected <= tools, (expected - tools, tools)
 print("OK tools/list:", sorted(tools))
 
-# inspect
+# inspect — now reports byte counts too
 inspect_text = responses[3]["result"]["content"][0]["text"]
 inspect = json.loads(inspect_text)
 assert inspect["is_pdf"] and inspect["has_semantic_layer"], inspect
+assert inspect["semantic_compressed_bytes"] and inspect["semantic_xml_bytes"], inspect
 print("OK aipdf_inspect")
 
 # extract onto
@@ -63,5 +72,15 @@ print("OK aipdf_extract(onto)")
 err = responses[5]["result"]
 assert err.get("isError") is True, err
 print("OK error handling")
+
+# validate
+val = json.loads(responses[6]["result"]["content"][0]["text"])
+assert val["valid"] is True, val
+print("OK aipdf_validate")
+
+# extract markdown-ast
+ast = responses[7]["result"]["content"][0]["text"]
+assert '"type": "root"' in ast, ast[:80]
+print("OK aipdf_extract(markdown-ast)")
 
 print("MCP server smoke OK")
