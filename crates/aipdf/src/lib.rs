@@ -18,7 +18,10 @@ pub use pdf::{
 pub use render::PageOptions;
 pub use security::sanitize_xml;
 pub use source::{semantic_xml_from_source, SourceKind};
-pub use xml::{find_citations, get_reading_order, get_tables, validate_xml, SemanticBlock};
+pub use xml::{
+    find_citations, get_reading_order, get_tables, validate_xml, SemanticBlock,
+    SUPPORTED_MAJOR_VERSION,
+};
 
 use std::fs;
 use std::path::Path;

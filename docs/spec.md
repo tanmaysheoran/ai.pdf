@@ -144,6 +144,39 @@ The older PDF `/Info` dictionary may include a flat `/AIPDFNote` for legacy tool
 
 V1 intentionally avoids a field named `instructions` because that can be confused with hidden prompt or model-directive content. Parsers should treat these fields as discovery metadata only.
 
+## Versioning and Compatibility
+
+The semantic payload is versioned by the root attribute
+`<document version="MAJOR.MINOR">`. Version negotiation follows three rules:
+
+1. **Major version is the compatibility boundary.** A reader implements one
+   major version (this prototype: `1`). It MUST accept any payload whose major
+   matches, regardless of minor (`1.0`, `1.3`, `1.99` are all accepted by a v1
+   reader).
+2. **Minor versions are forward-compatible and additive.** New minors may add
+   elements or attributes but never repurpose or remove existing ones. A reader
+   MUST ignore elements and attributes it does not recognise rather than fail.
+   This lets a v1.0 reader open a v1.3 file, simply skipping the v1.3 additions.
+3. **A different major version is rejected.** When a reader encounters a major
+   version it does not implement, it MUST NOT attempt to interpret the semantic
+   layer. It falls back to treating the file as an ordinary PDF (the visual
+   layer is always valid) and SHOULD surface a "newer semantic format" notice.
+   `validate_xml` enforces this: a non-`1.x` version is an error
+   (`AipdfError::InvalidXml`), and `extract_semantic_xml` therefore reports the
+   layer as absent, leaving the PDF usable.
+
+Migration contract for format authors:
+
+- Bumping the **minor** version is for additive changes only; existing readers
+  keep working.
+- A **major** bump signals a breaking change. Producers SHOULD continue to
+  embed a valid visual PDF layer so that older readers degrade to plain PDF, and
+  MAY dual-embed a `1.x` payload alongside a new-major payload during a
+  transition window (readers select the highest major they support).
+
+The implemented major version is exposed programmatically as
+`aipdf::SUPPORTED_MAJOR_VERSION`.
+
 ## Security
 
 The semantic layer is declarative only.
