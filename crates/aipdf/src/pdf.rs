@@ -27,6 +27,8 @@ pub struct BuildOptions {
     pub page: PageOptions,
     /// Embedded TrueType font for the visible layer (defaults to DejaVu Sans).
     pub font: Font,
+    /// Base directory for resolving relative figure image paths (`full` render).
+    pub base_dir: Option<std::path::PathBuf>,
 }
 
 impl Default for BuildOptions {
@@ -37,6 +39,7 @@ impl Default for BuildOptions {
             render: RenderMode::Minimal,
             page: PageOptions::default(),
             font: Font::default_font(),
+            base_dir: None,
         }
     }
 }
@@ -60,6 +63,7 @@ pub fn build_aipdf(xml: &str, options: &BuildOptions) -> Result<Vec<u8>> {
             &options.title,
             &options.page,
             &options.font,
+            options.base_dir.as_deref(),
         )),
         RenderMode::Minimal => {
             let visible_text = options

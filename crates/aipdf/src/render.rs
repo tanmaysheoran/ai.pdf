@@ -3,6 +3,41 @@ use crate::source::xml_escape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
+
+/// A decoded raster image ready to embed as a `/DeviceRGB` `/FlateDecode` XObject.
+struct EncodedImage {
+    width: u32,
+    height: u32,
+    /// zlib-compressed 8-bit RGB samples (row-major, w*h*3 bytes uncompressed).
+    data: Vec<u8>,
+}
+
+/// An image XObject placed on a page, named `/Im{n}` in the content stream.
+struct ImageObj {
+    name: String,
+    enc: EncodedImage,
+}
+
+/// Decode an image file to RGB8 (alpha dropped) and zlib-compress its samples.
+/// Returns None for missing/unreadable/remote sources so the caller can fall
+/// back to a labelled placeholder.
+fn load_image(base_dir: Option<&Path>, src: &str) -> Option<EncodedImage> {
+    if src.is_empty() || src.starts_with("http://") || src.starts_with("https://") {
+        return None; // the semantic layer stores no network references
+    }
+    let path = match base_dir {
+        Some(dir) => dir.join(src),
+        None => PathBuf::from(src),
+    };
+    let img = image::open(&path).ok()?.to_rgb8();
+    let (width, height) = img.dimensions();
+    Some(EncodedImage {
+        width,
+        height,
+        data: font::flate(&img.into_raw()),
+    })
+}
 
 const SEMANTIC_FILENAME: &str = "aipdf-semantic.xml.br";
 const SEMANTIC_SUBTYPE: &str = "/application#aipdf+xml+br";
@@ -382,6 +417,8 @@ struct Layout {
     opts: PageOptions,
     font: Font,
     glyphs: GlyphSet,
+    base_dir: Option<PathBuf>,
+    images: Vec<ImageObj>,
     pages: Vec<String>, // completed page content streams
     current: String,    // current page content stream
     cursor_y: f32,
@@ -397,12 +434,14 @@ const SECTION_SPACE: f32 = 16.0;
 const FOOTER_H: f32 = 20.0;
 
 impl Layout {
-    fn new(opts: PageOptions, font: Font) -> Self {
+    fn new(opts: PageOptions, font: Font, base_dir: Option<PathBuf>) -> Self {
         let top = opts.height - opts.margin_top;
         let mut this = Self {
             opts,
             font,
             glyphs: GlyphSet::new(),
+            base_dir,
+            images: Vec::new(),
             pages: Vec::new(),
             current: String::new(),
             cursor_y: top,
@@ -741,11 +780,52 @@ impl Layout {
     }
 
     fn render_figure(&mut self, alt: &str, src: &str, caption: Option<&str>) {
-        // Placeholder box with a label; real raster embedding is layered on in
-        // build_rendered_pdf via the figure image table (see #2).
+        let bw = self.opts.content_width();
+        // Try to embed the real raster; fall back to a labelled placeholder.
+        match load_image(self.base_dir.as_deref(), src) {
+            Some(enc) => self.draw_image(enc),
+            None => self.draw_figure_placeholder(alt, src),
+        }
+        if let Some(cap) = caption {
+            self.add_space(4.0);
+            let cap_lines = self.wrap(cap, BODY_SIZE - 1.0, bw);
+            for line in &cap_lines {
+                let lw = self.measure(line, BODY_SIZE - 1.0);
+                let lx = self.opts.margin_left + (bw - lw) / 2.0;
+                let y = self.cursor_y;
+                self.draw_single(line, lx, y, BODY_SIZE - 1.0, false);
+                self.cursor_y -= BODY_LEAD;
+            }
+        }
+        self.add_space(PARA_SPACE);
+    }
+
+    fn draw_image(&mut self, enc: EncodedImage) {
+        let bw = self.opts.content_width();
+        // Scale to content width, preserving aspect ratio, capped to ~80% of
+        // the printable page height.
+        let aspect = enc.height as f32 / enc.width as f32;
+        let mut dw = bw;
+        let mut dh = dw * aspect;
+        let max_h = (self.opts.height - self.opts.margin_top - self.opts.margin_bottom) * 0.8;
+        if dh > max_h {
+            dh = max_h;
+            dw = dh / aspect;
+        }
+        self.ensure_space(dh + PARA_SPACE * 2.0);
+        let name = format!("Im{}", self.images.len() + 1);
+        let x = self.opts.margin_left + (bw - dw) / 2.0;
+        let y = self.cursor_y - dh;
+        // Image space is the unit square; cm scales/translates it into place.
+        self.current
+            .push_str(&format!("q {dw:.2} 0 0 {dh:.2} {x:.2} {y:.2} cm /{name} Do Q\n"));
+        self.images.push(ImageObj { name, enc });
+        self.cursor_y -= dh;
+    }
+
+    fn draw_figure_placeholder(&mut self, alt: &str, src: &str) {
         let box_h = 80.0;
-        let needed = box_h + PARA_SPACE * 2.0 + caption.map(|_| BODY_LEAD + 4.0).unwrap_or(0.0);
-        self.ensure_space(needed);
+        self.ensure_space(box_h + PARA_SPACE * 2.0);
         let bx = self.opts.margin_left;
         let by = self.cursor_y - box_h;
         let bw = self.opts.content_width();
@@ -764,18 +844,6 @@ impl Layout {
         let ly = by + box_h / 2.0 - BODY_SIZE / 2.0;
         self.draw_single(&label, lx, ly, BODY_SIZE, false);
         self.cursor_y -= box_h;
-        if let Some(cap) = caption {
-            self.add_space(4.0);
-            let cap_lines = self.wrap(cap, BODY_SIZE - 1.0, bw);
-            for line in &cap_lines {
-                let lw = self.measure(line, BODY_SIZE - 1.0);
-                let lx = bx + (bw - lw) / 2.0;
-                let y = self.cursor_y;
-                self.draw_single(line, lx, y, BODY_SIZE - 1.0, false);
-                self.cursor_y -= BODY_LEAD;
-            }
-        }
-        self.add_space(PARA_SPACE);
     }
 
     fn draw_hline(&mut self, gray: f32, width: f32) {
@@ -788,10 +856,10 @@ impl Layout {
         self.cursor_y -= 1.0;
     }
 
-    fn finalize(mut self) -> (Vec<String>, usize, GlyphSet) {
+    fn finalize(mut self) -> (Vec<String>, usize, GlyphSet, Vec<ImageObj>) {
         self.finish_page();
         let total = self.pages.len();
-        (self.pages, total, self.glyphs)
+        (self.pages, total, self.glyphs, self.images)
     }
 }
 
@@ -895,9 +963,10 @@ pub fn build_rendered_pdf(
     title: &str,
     page_opts: &PageOptions,
     font: &Font,
+    base_dir: Option<&Path>,
 ) -> Vec<u8> {
     let elems = parse_elements(xml);
-    let mut layout = Layout::new(page_opts.clone(), font.clone());
+    let mut layout = Layout::new(page_opts.clone(), font.clone(), base_dir.map(Path::to_path_buf));
 
     for elem in elems {
         match elem {
@@ -917,7 +986,7 @@ pub fn build_rendered_pdf(
         }
     }
 
-    let (page_streams, page_count, glyphs) = layout.finalize();
+    let (page_streams, page_count, glyphs, images) = layout.finalize();
 
     // Build PDF object tree
     let mut asm = Assembler::new();
@@ -935,7 +1004,25 @@ pub fn build_rendered_pdf(
     let cid_id = asm.add(font::cidfont_dict(font, desc_id, used).into_bytes());
     let tu_id = asm.add(stream_obj(&font::tounicode_cmap(used), "<< >>"));
     let type0_id = asm.add(font::type0_dict(font, cid_id, tu_id).into_bytes());
-    let font_res = format!("<< /F1 {type0_id} 0 R >>");
+
+    // Embed figure images as shared XObjects (one resource dict for all pages).
+    let mut xobject_entries = Vec::new();
+    for img in &images {
+        let dict = format!(
+            "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode >>",
+            img.enc.width, img.enc.height
+        );
+        let id = asm.add(stream_obj(&img.enc.data, &dict));
+        xobject_entries.push(format!("/{} {id} 0 R", img.name));
+    }
+    let resources = if xobject_entries.is_empty() {
+        format!("<< /Font << /F1 {type0_id} 0 R >> >>")
+    } else {
+        format!(
+            "<< /Font << /F1 {type0_id} 0 R >> /XObject << {} >> >>",
+            xobject_entries.join(" ")
+        )
+    };
 
     // Page content streams and page objects
     let mut page_ids = Vec::new();
@@ -943,7 +1030,7 @@ pub fn build_rendered_pdf(
         let cs_id = asm.add(stream_obj(stream.as_bytes(), "<< >>"));
         let pg_id = asm.add(
             format!(
-                "<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 {} {}] /Resources << /Font {font_res} >> /Contents {cs_id} 0 R >>",
+                "<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 {} {}] /Resources {resources} /Contents {cs_id} 0 R >>",
                 page_opts.width, page_opts.height
             )
             .into_bytes(),

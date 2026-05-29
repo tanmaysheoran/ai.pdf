@@ -98,6 +98,8 @@ fn main() -> aipdf::Result<()> {
                 Some(path) => Font::from_path(&path)?,
                 None => Font::default_font(),
             };
+            // Resolve relative figure image paths against the input's directory.
+            let base_dir = input.parent().map(|p| p.to_path_buf());
             let bytes = build_aipdf(
                 &xml,
                 &BuildOptions {
@@ -106,6 +108,7 @@ fn main() -> aipdf::Result<()> {
                     render: render_mode,
                     page,
                     font,
+                    base_dir,
                 },
             )?;
             let output = output.unwrap_or_else(|| {
