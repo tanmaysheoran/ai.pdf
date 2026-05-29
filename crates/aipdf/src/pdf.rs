@@ -83,14 +83,17 @@ pub fn build_aipdf(xml: &str, options: &BuildOptions) -> Result<Vec<u8>> {
 }
 
 pub fn inspect_pdf(bytes: &[u8]) -> InspectReport {
-    match extract_semantic_xml(bytes) {
-        Ok(xml) => InspectReport {
-            is_pdf: bytes.starts_with(b"%PDF-"),
-            has_semantic_layer: true,
-            semantic_compressed_bytes: find_semantic_stream(bytes).map(|s| s.len()),
-            semantic_xml_bytes: Some(xml.len()),
-        },
-        Err(_) => InspectReport {
+    match find_semantic_compressed(bytes) {
+        Some(compressed) => {
+            let xml = decompress_semantic(&compressed).ok();
+            InspectReport {
+                is_pdf: bytes.starts_with(b"%PDF-"),
+                has_semantic_layer: xml.is_some(),
+                semantic_compressed_bytes: Some(compressed.len()),
+                semantic_xml_bytes: xml.map(|x| x.len()),
+            }
+        }
+        None => InspectReport {
             is_pdf: bytes.starts_with(b"%PDF-"),
             has_semantic_layer: false,
             semantic_compressed_bytes: None,
@@ -100,8 +103,12 @@ pub fn inspect_pdf(bytes: &[u8]) -> InspectReport {
 }
 
 pub fn extract_semantic_xml(bytes: &[u8]) -> Result<String> {
-    let stream = find_semantic_stream(bytes).ok_or(AipdfError::SemanticLayerNotFound)?;
-    let mut decompressor = Decompressor::new(stream, 4096);
+    let compressed = find_semantic_compressed(bytes).ok_or(AipdfError::SemanticLayerNotFound)?;
+    decompress_semantic(&compressed)
+}
+
+fn decompress_semantic(compressed: &[u8]) -> Result<String> {
+    let mut decompressor = Decompressor::new(compressed, 4096);
     let mut out = String::new();
     decompressor
         .read_to_string(&mut out)
@@ -109,6 +116,18 @@ pub fn extract_semantic_xml(bytes: &[u8]) -> Result<String> {
     let out = sanitize_xml(&out)?;
     validate_xml(&out)?;
     Ok(out)
+}
+
+/// Locate the Brotli-compressed semantic payload. Tries the fast literal
+/// byte-scan first (works for files written by this crate's hand builder), then
+/// falls back to a structural lopdf lookup that finds the EmbeddedFile by its
+/// parsed `/Subtype` regardless of PDF name escaping or xref/object streams —
+/// this is what makes ingested (lopdf-saved) files extractable too.
+fn find_semantic_compressed(bytes: &[u8]) -> Option<Vec<u8>> {
+    if let Some(s) = find_semantic_stream(bytes) {
+        return Some(s.to_vec());
+    }
+    find_semantic_stream_lopdf(bytes)
 }
 
 fn find_semantic_stream(bytes: &[u8]) -> Option<&[u8]> {
@@ -124,6 +143,26 @@ fn find_semantic_stream(bytes: &[u8]) -> Option<&[u8]> {
     let after_stream = &bytes[stream_start..];
     let end_rel = find_bytes(after_stream, b"\nendstream")?;
     Some(&bytes[stream_start..stream_start + end_rel])
+}
+
+fn find_semantic_stream_lopdf(bytes: &[u8]) -> Option<Vec<u8>> {
+    let doc = lopdf::Document::load_mem(bytes).ok()?;
+    for (_id, obj) in doc.objects.iter() {
+        if let lopdf::Object::Stream(s) = obj {
+            let is_ef =
+                s.dict.get(b"Type").ok().and_then(|o| o.as_name().ok()) == Some(b"EmbeddedFile".as_ref());
+            let subtype_is_aipdf = s
+                .dict
+                .get(b"Subtype")
+                .ok()
+                .and_then(|o| o.as_name().ok())
+                .map_or(false, |n| n.windows(5).any(|w| w == b"aipdf"));
+            if is_ef && subtype_is_aipdf {
+                return Some(s.content.clone());
+            }
+        }
+    }
+    None
 }
 
 pub(crate) fn brotli_compress(input: &[u8]) -> Result<Vec<u8>> {

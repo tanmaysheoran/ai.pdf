@@ -1,7 +1,7 @@
 use aipdf::{
-    build_aipdf, extract_semantic_xml, inspect_pdf, semantic_xml_from_source, validate_xml,
-    xml_to_markdown, xml_to_markdown_ast_json, xml_to_onto, BuildOptions, Font, PageOptions,
-    RenderMode, SourceKind,
+    build_aipdf, extract_semantic_xml, ingest_pdf, inspect_pdf, semantic_xml_from_source,
+    validate_xml, xml_to_markdown, xml_to_markdown_ast_json, xml_to_onto, BuildOptions, Font,
+    IngestOptions, OcrMode, PageOptions, RenderMode, SourceKind,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use std::{fs, path::PathBuf};
@@ -30,6 +30,16 @@ enum Command {
         /// CJK face). Defaults to the bundled DejaVu Sans.
         #[arg(long)]
         font: Option<PathBuf>,
+    },
+    /// Attach a semantic layer to an existing PDF (text extraction + optional OCR).
+    Ingest {
+        input: PathBuf,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = Ocr::Auto)]
+        ocr: Ocr,
+        #[arg(long, default_value = "eng")]
+        lang: String,
     },
     Inspect {
         file: PathBuf,
@@ -70,6 +80,14 @@ enum PageSize {
     #[default]
     Letter,
     A4,
+}
+
+#[derive(Clone, ValueEnum, Default)]
+enum Ocr {
+    #[default]
+    Auto,
+    Never,
+    Force,
 }
 
 fn main() -> aipdf::Result<()> {
@@ -116,6 +134,26 @@ fn main() -> aipdf::Result<()> {
                 input.with_file_name(format!("{}.ai.pdf", stem.to_string_lossy()))
             });
             fs::write(&output, bytes)?;
+            println!("{}", output.display());
+        }
+        Command::Ingest {
+            input,
+            output,
+            ocr,
+            lang,
+        } => {
+            let bytes = fs::read(&input)?;
+            let ocr = match ocr {
+                Ocr::Auto => OcrMode::Auto,
+                Ocr::Never => OcrMode::Never,
+                Ocr::Force => OcrMode::Force,
+            };
+            let out_bytes = ingest_pdf(&bytes, &IngestOptions { ocr, lang })?;
+            let output = output.unwrap_or_else(|| {
+                let stem = input.file_stem().unwrap_or(input.as_os_str());
+                input.with_file_name(format!("{}.ai.pdf", stem.to_string_lossy()))
+            });
+            fs::write(&output, out_bytes)?;
             println!("{}", output.display());
         }
         Command::Inspect { file } => {
