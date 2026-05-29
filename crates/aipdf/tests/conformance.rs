@@ -1,9 +1,8 @@
 //! Conformance: the Rust transforms reproduce the committed golden fixtures.
-//! The Python and TypeScript SDKs assert the *same* goldens for `onto`/`markdown`,
-//! so all three implementations are pinned to one source of truth. The
-//! `markdown-ast` exporter is Rust-only (the SDKs ship no AST path), so its
-//! golden is asserted here alone — it guards the figure/image regression where
-//! self-closing `<image/>` nodes were silently dropped from the AST.
+//! The Python and TypeScript SDKs assert the *same* goldens for `onto`,
+//! `markdown`, and `markdown-ast`, so all three implementations are pinned to
+//! one source of truth. The `rich.ast.json` golden also guards the figure/image
+//! regression where self-closing `<image/>` nodes were silently dropped.
 
 use aipdf::{xml_to_markdown, xml_to_markdown_ast_json, xml_to_onto};
 

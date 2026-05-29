@@ -178,18 +178,18 @@ ONTO is a derived, export-only columnar format for LLM ingestion — it is never
 - Strings containing newlines or leading/trailing spaces are backtick-wrapped.
 - Table `rows` field is pre-serialized as `cell1^cell2|cell1^cell2` and emitted via `column_raw` (not re-encoded).
 
-All three SDKs implement the same shape: `doc.to_onto()` (Python), `doc.toOnto()` (TypeScript), `AipdfDocument::to_onto()` (Rust).
+All three SDKs implement the same shape: `doc.to_onto()` (Python), `doc.toOnto()` (TypeScript), `AipdfDocument::to_onto()` (Rust). The MDAST exporter is likewise mirrored: `doc.to_markdown_ast()` (Python), `doc.toMarkdownAst()` (TypeScript), `xml_to_markdown_ast_json` (Rust core / CLI `export --format markdown-ast`).
 
 ### SDK layout
 
-- `sdk/python/` — pure Python, depends on `brotli>=1.1.0`. `xml_to_onto` uses `xml.etree.ElementTree` with a recursive `walk`. The `_onto_scalar` encoder mirrors the Rust encoder exactly. Public class: `AIPDF`. Also ships `aipdf.mcp_server` (MCP stdio server; `aipdf-mcp` console script).
-- `sdk/typescript/` — ESM TypeScript, no runtime deps. Uses Node's built-in `zlib` for Brotli. The read-side transforms (`xmlToMarkdown`/`xmlToOnto`/`getReadingOrder`/`collectElementText`) run on a small proper XML parser + DOM walk (`parseXml`), not regex. Public class: `AIPDF`.
+- `sdk/python/` — pure Python, depends on `brotli>=1.1.0`. `xml_to_onto` uses `xml.etree.ElementTree` with a recursive `walk`. The `_onto_scalar` encoder mirrors the Rust encoder exactly. `xml_to_markdown_ast_json` (method `doc.to_markdown_ast()`) mirrors the Rust AST walker via a recursive `_ast_emit`. Public class: `AIPDF`. Also ships `aipdf.mcp_server` (MCP stdio server; `aipdf-mcp` console script).
+- `sdk/typescript/` — ESM TypeScript, no runtime deps. Uses Node's built-in `zlib` for Brotli. The read-side transforms (`xmlToMarkdown`/`xmlToMarkdownAstJson`/`xmlToOnto`/`getReadingOrder`/`collectElementText`) run on a small proper XML parser + DOM walk (`parseXml`), not regex. The AST builder (`mdNode`) emits node keys in the Rust field order and omits absent ones so `JSON.stringify` matches serde. Public class: `AIPDF`.
 
 ### Cross-SDK conformance (single source of truth)
 
 The Rust core is authoritative. Golden ONTO/Markdown fixtures in `tests/conformance/` are generated from Rust and asserted byte-for-byte by all three implementations (`crates/aipdf/tests/conformance.rs`, `tests/conformance_python.py`, `sdk/typescript/test/conformance.test.mjs`). When changing any exporter, regenerate the goldens from Rust and confirm all three still match. The disallowed-marker lists in `security.rs`, the Python SDK, and the TS SDK are kept identical.
 
-The `markdown-ast` exporter is **Rust-only** (the Python and TS SDKs ship no AST path), so its golden (`tests/conformance/rich.ast.json`) is asserted only by the Rust conformance test. `rich.xml` carries a `<figure>`/`<image>`, so the AST golden also guards against the regression where self-closing `<image/>` nodes were dropped from the AST output.
+The `markdown-ast` exporter (MDAST-compatible JSON) is implemented in all three SDKs — `xml_to_markdown_ast_json` (Rust core + Python SDK), `xmlToMarkdownAstJson` (TS SDK) — and its golden (`tests/conformance/rich.ast.json`) is asserted by all three harnesses. Node objects are emitted in the Rust struct's field order (`type, value, depth, lang, ordered, url, alt, children`) with absent fields omitted, so the pretty JSON is byte-for-byte identical across `serde_json`, Python `json.dumps(ensure_ascii=False)`, and JS `JSON.stringify`. `rich.xml` carries a `<figure>`/`<image>`, so the AST golden also guards against the regression where self-closing `<image/>` nodes were dropped from the AST output.
 
 ### MCP server
 
