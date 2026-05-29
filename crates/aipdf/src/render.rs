@@ -1,7 +1,7 @@
 use crate::font::{self, Font, GlyphSet};
 use crate::source::xml_escape;
 use quick_xml::events::Event;
-use quick_xml::Reader;
+use quick_xml::{Reader, Writer};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -125,14 +125,22 @@ fn wrap_words(font: &Font, text: &str, size: f32, max_width: f32) -> Vec<String>
 #[derive(Debug)]
 enum DocElem {
     DocTitle(String),
-    Heading { level: usize, text: String },
-    Paragraph(String),
-    Table { caption: Option<String>, rows: Vec<Vec<String>> },
-    CodeBlock { language: Option<String>, text: String },
-    List { ordered: bool, items: Vec<String> },
-    Citation(String),
-    Note(String),
-    Figure { alt: String, src: String, caption: Option<String> },
+    Heading { level: usize, text: String, id: Option<String> },
+    Paragraph { text: String, id: Option<String> },
+    Table { caption: Option<String>, rows: Vec<Vec<String>>, id: Option<String> },
+    CodeBlock { language: Option<String>, text: String, id: Option<String> },
+    List { ordered: bool, items: Vec<String>, id: Option<String> },
+    Citation { text: String, id: Option<String> },
+    Note { text: String, id: Option<String> },
+    Figure { alt: String, src: String, caption: Option<String>, id: Option<String> },
+}
+
+/// Page + bounding box recorded for a block during layout (PDF user-space
+/// points, page-local, origin bottom-left). Written back into the semantic XML.
+struct BlockCoord {
+    id: String,
+    page: usize,
+    bbox: (f32, f32, f32, f32),
 }
 
 fn parse_elements(xml: &str) -> Vec<DocElem> {
@@ -160,6 +168,11 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
     let mut in_code = false;
     let mut code_lang: Option<String> = None;
     let mut current = String::new();
+    // Captured `id` of the block currently being assembled.
+    let mut block_id: Option<String> = None;
+    let mut list_id: Option<String> = None;
+    let mut table_id: Option<String> = None;
+    let mut fig_id: Option<String> = None;
 
     // list state
     let mut in_list = false;
@@ -199,31 +212,38 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                     }
                     "title" if !in_meta && !in_table => {
                         in_title = true;
+                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "paragraph" => {
                         in_para = true;
+                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "citation" => {
                         in_citation = true;
+                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "equation" => {
                         in_equation = true;
+                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "note" | "footnote" if !in_table => {
                         in_note = true;
+                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "codeBlock" => {
                         in_code = true;
                         code_lang = attr_val(&e, b"language");
+                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "list" => {
                         in_list = true;
+                        list_id = attr_val(&e, b"id");
                         list_ordered = attr_val(&e, b"type")
                             .map(|t| t == "ordered")
                             .unwrap_or(false);
@@ -235,15 +255,18 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                     }
                     "references" => {
                         in_list = true;
+                        list_id = attr_val(&e, b"id");
                         list_ordered = false;
                         list_items.clear();
                     }
                     "reference" if !in_list => {
                         in_reference = true;
+                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "table" if !in_meta => {
                         in_table = true;
+                        table_id = attr_val(&e, b"id");
                         table_caption = None;
                         table_rows.clear();
                     }
@@ -261,6 +284,7 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                     }
                     "figure" => {
                         in_figure = true;
+                        fig_id = attr_val(&e, b"id");
                         fig_src.clear();
                         fig_alt.clear();
                         fig_caption = None;
@@ -311,25 +335,38 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                         elems.push(DocElem::Heading {
                             level: section_level,
                             text: current.trim().to_string(),
+                            id: block_id.take(),
                         });
                         in_title = false;
                     }
                     "paragraph" if in_para => {
                         if !current.trim().is_empty() {
-                            elems.push(DocElem::Paragraph(current.trim().to_string()));
+                            elems.push(DocElem::Paragraph {
+                                text: current.trim().to_string(),
+                                id: block_id.take(),
+                            });
                         }
                         in_para = false;
                     }
                     "citation" if in_citation => {
-                        elems.push(DocElem::Citation(current.trim().to_string()));
+                        elems.push(DocElem::Citation {
+                            text: current.trim().to_string(),
+                            id: block_id.take(),
+                        });
                         in_citation = false;
                     }
                     "equation" if in_equation => {
-                        elems.push(DocElem::Paragraph(format!("[ {} ]", current.trim())));
+                        elems.push(DocElem::Paragraph {
+                            text: format!("[ {} ]", current.trim()),
+                            id: block_id.take(),
+                        });
                         in_equation = false;
                     }
                     "note" | "footnote" if in_note => {
-                        elems.push(DocElem::Note(current.trim().to_string()));
+                        elems.push(DocElem::Note {
+                            text: current.trim().to_string(),
+                            id: block_id.take(),
+                        });
                         in_note = false;
                         _in_footnote = false;
                     }
@@ -337,6 +374,7 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                         elems.push(DocElem::CodeBlock {
                             language: code_lang.take(),
                             text: current.trim().to_string(),
+                            id: block_id.take(),
                         });
                         in_code = false;
                     }
@@ -349,13 +387,17 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                             elems.push(DocElem::List {
                                 ordered: list_ordered,
                                 items: list_items.clone(),
+                                id: list_id.take(),
                             });
                         }
                         in_list = false;
                     }
                     "reference" if in_reference => {
                         if !current.trim().is_empty() {
-                            elems.push(DocElem::Paragraph(current.trim().to_string()));
+                            elems.push(DocElem::Paragraph {
+                                text: current.trim().to_string(),
+                                id: block_id.take(),
+                            });
                         }
                         in_reference = false;
                     }
@@ -378,6 +420,7 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                             elems.push(DocElem::Table {
                                 caption: table_caption.take(),
                                 rows: table_rows.clone(),
+                                id: table_id.take(),
                             });
                         }
                         in_table = false;
@@ -391,6 +434,7 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                             alt: fig_alt.clone(),
                             src: fig_src.clone(),
                             caption: fig_caption.take(),
+                            id: fig_id.take(),
                         });
                         in_figure = false;
                     }
@@ -419,6 +463,7 @@ struct Layout {
     glyphs: GlyphSet,
     base_dir: Option<PathBuf>,
     images: Vec<ImageObj>,
+    coords: Vec<BlockCoord>,
     pages: Vec<String>, // completed page content streams
     current: String,    // current page content stream
     cursor_y: f32,
@@ -442,6 +487,7 @@ impl Layout {
             glyphs: GlyphSet::new(),
             base_dir,
             images: Vec::new(),
+            coords: Vec::new(),
             pages: Vec::new(),
             current: String::new(),
             cursor_y: top,
@@ -856,10 +902,10 @@ impl Layout {
         self.cursor_y -= 1.0;
     }
 
-    fn finalize(mut self) -> (Vec<String>, usize, GlyphSet, Vec<ImageObj>) {
+    fn finalize(mut self) -> (Vec<String>, usize, GlyphSet, Vec<ImageObj>, Vec<BlockCoord>) {
         self.finish_page();
         let total = self.pages.len();
-        (self.pages, total, self.glyphs, self.images)
+        (self.pages, total, self.glyphs, self.images, self.coords)
     }
 }
 
@@ -957,9 +1003,22 @@ fn xmp_metadata(title: &str, xml_bytes: usize, compressed_bytes: usize) -> Strin
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
+fn elem_id(e: &DocElem) -> Option<&str> {
+    match e {
+        DocElem::Heading { id, .. }
+        | DocElem::Paragraph { id, .. }
+        | DocElem::Table { id, .. }
+        | DocElem::CodeBlock { id, .. }
+        | DocElem::List { id, .. }
+        | DocElem::Citation { id, .. }
+        | DocElem::Note { id, .. }
+        | DocElem::Figure { id, .. } => id.as_deref(),
+        DocElem::DocTitle(_) => None,
+    }
+}
+
 pub fn build_rendered_pdf(
     xml: &str,
-    compressed: &[u8],
     title: &str,
     page_opts: &PageOptions,
     font: &Font,
@@ -968,25 +1027,56 @@ pub fn build_rendered_pdf(
     let elems = parse_elements(xml);
     let mut layout = Layout::new(page_opts.clone(), font.clone(), base_dir.map(Path::to_path_buf));
 
-    for elem in elems {
+    for elem in &elems {
+        let id = elem_id(elem).map(str::to_string);
+        let top_before = layout.cursor_y;
+        let page_before = layout.page_num;
+
         match elem {
-            DocElem::DocTitle(t) => layout.render_doc_title(&t),
-            DocElem::Heading { level, text } => layout.render_heading(level, &text),
-            DocElem::Paragraph(t) => layout.render_paragraph(&t),
-            DocElem::Citation(t) => layout.render_citation(&t),
-            DocElem::Note(t) => layout.render_note(&t),
-            DocElem::CodeBlock { language, text } => {
-                layout.render_code_block(&text, language.as_deref())
+            DocElem::DocTitle(t) => layout.render_doc_title(t),
+            DocElem::Heading { level, text, .. } => layout.render_heading(*level, text),
+            DocElem::Paragraph { text, .. } => layout.render_paragraph(text),
+            DocElem::Citation { text, .. } => layout.render_citation(text),
+            DocElem::Note { text, .. } => layout.render_note(text),
+            DocElem::CodeBlock { language, text, .. } => {
+                layout.render_code_block(text, language.as_deref())
             }
-            DocElem::List { ordered, items } => layout.render_list(ordered, &items),
-            DocElem::Table { caption, rows } => layout.render_table(caption.as_deref(), &rows),
-            DocElem::Figure { alt, src, caption } => {
-                layout.render_figure(&alt, &src, caption.as_deref())
+            DocElem::List { ordered, items, .. } => layout.render_list(*ordered, items),
+            DocElem::Table { caption, rows, .. } => layout.render_table(caption.as_deref(), rows),
+            DocElem::Figure { alt, src, caption, .. } => {
+                layout.render_figure(alt, src, caption.as_deref())
             }
+        }
+
+        // Record the block's page + bbox. If a page break happened mid-block we
+        // attribute it to the page it ended up on (an approximation for blocks
+        // that span a boundary); the common single-page case is exact.
+        if let Some(id) = id {
+            let page_after = layout.page_num;
+            let (page, top) = if page_after == page_before {
+                (page_before, top_before)
+            } else {
+                (page_after, layout.opts.height - layout.opts.margin_top)
+            };
+            let x0 = layout.opts.margin_left;
+            let x1 = x0 + layout.opts.content_width();
+            let bottom = layout.cursor_y.max(layout.opts.margin_bottom);
+            layout.coords.push(BlockCoord {
+                id,
+                page,
+                bbox: (x0, bottom, x1, top),
+            });
         }
     }
 
-    let (page_streams, page_count, glyphs, images) = layout.finalize();
+    let (page_streams, page_count, glyphs, images, coords) = layout.finalize();
+
+    // Rewrite the semantic XML with the real page/bbox coordinates, then embed
+    // that updated payload (compressed) so the machine layer matches the visuals.
+    let xml = apply_coordinates(xml, &coords);
+    let xml = xml.as_str();
+    let compressed = crate::pdf::brotli_compress(xml.as_bytes()).expect("brotli compress");
+    let compressed = compressed.as_slice();
 
     // Build PDF object tree
     let mut asm = Assembler::new();
@@ -1081,6 +1171,72 @@ pub fn build_rendered_pdf(
     );
 
     asm.build(catalog_id, title)
+}
+
+// ── Coordinate write-back ──────────────────────────────────────────────────────
+
+/// Rewrite the semantic XML, replacing each matched element's `page` and `bbox`
+/// attributes with the real laid-out coordinates. Elements without a recorded
+/// coordinate are passed through unchanged.
+fn apply_coordinates(xml: &str, coords: &[BlockCoord]) -> String {
+    use quick_xml::events::BytesStart;
+    use std::collections::HashMap;
+    use std::io::Cursor;
+
+    let map: HashMap<&str, &BlockCoord> = coords.iter().map(|c| (c.id.as_str(), c)).collect();
+
+    let rewrite = |e: &BytesStart| -> Option<BytesStart<'static>> {
+        let id = e
+            .attributes()
+            .flatten()
+            .find(|a| a.key.as_ref() == b"id")
+            .map(|a| String::from_utf8_lossy(a.value.as_ref()).into_owned())?;
+        let c = map.get(id.as_str())?;
+        let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+        let mut nb = BytesStart::new(name);
+        for attr in e.attributes().flatten() {
+            let key = attr.key.as_ref();
+            if key == b"page" || key == b"bbox" {
+                continue; // replaced below
+            }
+            let k = String::from_utf8_lossy(key).into_owned();
+            let v = String::from_utf8_lossy(attr.value.as_ref()).into_owned();
+            nb.push_attribute((k.as_str(), v.as_str()));
+        }
+        let (x0, y0, x1, y1) = c.bbox;
+        nb.push_attribute(("page", c.page.to_string().as_str()));
+        nb.push_attribute(("bbox", format!("{x0:.1},{y0:.1},{x1:.1},{y1:.1}").as_str()));
+        Some(nb)
+    };
+
+    let mut reader = Reader::from_str(xml);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) => {
+                let ev = rewrite(&e);
+                match ev {
+                    Some(nb) => writer.write_event(Event::Start(nb)),
+                    None => writer.write_event(Event::Start(e)),
+                }
+                .ok();
+            }
+            Ok(Event::Empty(e)) => {
+                let ev = rewrite(&e);
+                match ev {
+                    Some(nb) => writer.write_event(Event::Empty(nb)),
+                    None => writer.write_event(Event::Empty(e)),
+                }
+                .ok();
+            }
+            Ok(Event::Eof) => break,
+            Ok(ev) => {
+                writer.write_event(ev).ok();
+            }
+            Err(_) => break,
+        }
+    }
+    String::from_utf8(writer.into_inner().into_inner()).unwrap_or_else(|_| xml.to_string())
 }
 
 // ── PDF string encoding (used only for /Info and dict literals) ────────────────

@@ -55,17 +55,18 @@ pub struct InspectReport {
 pub fn build_aipdf(xml: &str, options: &BuildOptions) -> Result<Vec<u8>> {
     let xml = sanitize_xml(xml)?;
     validate_xml(&xml)?;
-    let compressed = brotli_compress(xml.as_bytes())?;
     match options.render {
+        // Full render lays out the page first, writes the real page/bbox
+        // coordinates back into the XML, then compresses + embeds that payload.
         RenderMode::Full => Ok(build_rendered_pdf(
             &xml,
-            &compressed,
             &options.title,
             &options.page,
             &options.font,
             options.base_dir.as_deref(),
         )),
         RenderMode::Minimal => {
+            let compressed = brotli_compress(xml.as_bytes())?;
             let visible_text = options
                 .visible_text
                 .clone()
@@ -125,7 +126,7 @@ fn find_semantic_stream(bytes: &[u8]) -> Option<&[u8]> {
     Some(&bytes[stream_start..stream_start + end_rel])
 }
 
-fn brotli_compress(input: &[u8]) -> Result<Vec<u8>> {
+pub(crate) fn brotli_compress(input: &[u8]) -> Result<Vec<u8>> {
     let mut reader = CompressorReader::new(input, 4096, 6, 22);
     let mut compressed = Vec::new();
     reader
