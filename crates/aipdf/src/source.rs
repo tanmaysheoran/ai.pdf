@@ -188,20 +188,6 @@ impl HtmlConverter {
         ));
     }
 
-    fn push_equation(&mut self, text: &str) {
-        let text = text.trim();
-        if text.is_empty() {
-            return;
-        }
-        self.ensure_section();
-        let bid = self.block_id;
-        self.block_id += 1;
-        self.blocks.push(format!(
-            r#"<equation id="b{bid}">{}</equation>"#,
-            xml_escape(text)
-        ));
-    }
-
     fn push_citation(&mut self, text: &str) {
         let text = text.trim();
         if text.is_empty() {
@@ -445,372 +431,80 @@ fn element_text(el: &ElementRef<'_>) -> String {
 
 // ── Markdown → semantic XML ──────────────────────────────────────────────────
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
-
-fn heading_level(h: HeadingLevel) -> usize {
-    match h {
-        HeadingLevel::H1 => 1,
-        HeadingLevel::H2 => 2,
-        HeadingLevel::H3 => 3,
-        HeadingLevel::H4 => 4,
-        HeadingLevel::H5 => 5,
-        HeadingLevel::H6 => 6,
-    }
-}
-
-/// A pending list being built (lists can nest; each level is flushed when its
-/// `List` end tag arrives).
-struct ListCtx {
-    ordered: bool,
-    items: Vec<String>,
-}
-
-/// A pending table being built.
-struct TableCtx {
-    rows: Vec<Vec<(String, bool)>>,
-    cur: Vec<(String, bool)>,
-    in_header: bool,
-}
-
 pub(crate) fn markdown_to_xml(input: &str) -> String {
-    let mut opts = Options::empty();
-    opts.insert(Options::ENABLE_TABLES);
-    opts.insert(Options::ENABLE_STRIKETHROUGH);
-    opts.insert(Options::ENABLE_FOOTNOTES);
-    opts.insert(Options::ENABLE_TASKLISTS);
-    let parser = Parser::new_ext(input, opts);
+    let mut blocks = Vec::new();
+    let mut section_id = 1usize;
+    let mut block_id = 1usize;
+    let mut open = false;
 
-    let mut conv = HtmlConverter::new();
-    // Inline text accumulator for the block currently being assembled.
-    let mut inline = String::new();
-    let mut heading: Option<usize> = None;
-    let mut lists: Vec<ListCtx> = Vec::new();
-    let mut in_item = false;
-    let mut code: Option<Option<String>> = None; // Some(lang?) while inside a code block
-    let mut quote: Option<String> = None; // accumulates blockquote text -> citation
-    let mut table: Option<TableCtx> = None;
-    let mut image: Option<(String, String)> = None; // (src, alt accumulator)
-
-    let push_text = |inline: &mut String,
-                     quote: &mut Option<String>,
-                     image: &mut Option<(String, String)>,
-                     s: &str| {
-        if let Some((_, alt)) = image.as_mut() {
-            alt.push_str(s);
-        } else if let Some(q) = quote.as_mut() {
-            q.push_str(s);
+    for paragraph in paragraphs(input) {
+        if let Some((level, title)) = markdown_heading(&paragraph) {
+            if open {
+                blocks.push("</section>".to_string());
+            }
+            blocks.push(format!(
+                r#"<section id="s{section_id}" level="{level}" page="1">"#
+            ));
+            blocks.push(format!(
+                r#"<title id="b{block_id}" page="1" role="title">{}</title>"#,
+                xml_escape(title)
+            ));
+            section_id += 1;
+            block_id += 1;
+            open = true;
         } else {
-            inline.push_str(s);
-        }
-    };
-
-    for event in parser {
-        match event {
-            Event::Start(Tag::Heading { level, .. }) => {
-                heading = Some(heading_level(level));
-                inline.clear();
+            if !open {
+                blocks.push(r#"<section id="s1" level="1" page="1">"#.to_string());
+                open = true;
+                section_id = 2;
             }
-            Event::End(TagEnd::Heading(_)) => {
-                if let Some(level) = heading.take() {
-                    conv.open_section(level, inline.trim());
-                }
-                inline.clear();
-            }
-            Event::Start(Tag::Paragraph) => {
-                if quote.is_none() && !in_item {
-                    inline.clear();
-                }
-            }
-            Event::End(TagEnd::Paragraph) => {
-                // Inside a list item or blockquote the text is flushed by the
-                // enclosing container; a top-level paragraph is flushed here.
-                if quote.is_none() && !in_item {
-                    conv.push_paragraph(inline.trim());
-                    inline.clear();
-                } else if quote.is_some() {
-                    if let Some(q) = quote.as_mut() {
-                        q.push(' ');
-                    }
-                }
-            }
-            Event::Start(Tag::List(start)) => {
-                lists.push(ListCtx {
-                    ordered: start.is_some(),
-                    items: Vec::new(),
-                });
-            }
-            Event::End(TagEnd::List(_)) => {
-                if let Some(ctx) = lists.pop() {
-                    conv.push_list(&ctx.items, ctx.ordered);
-                }
-            }
-            Event::Start(Tag::Item) => {
-                in_item = true;
-                inline.clear();
-            }
-            Event::End(TagEnd::Item) => {
-                in_item = false;
-                if let Some(ctx) = lists.last_mut() {
-                    ctx.items.push(inline.trim().to_string());
-                }
-                inline.clear();
-            }
-            Event::Start(Tag::CodeBlock(kind)) => {
-                let lang = match kind {
-                    CodeBlockKind::Fenced(l) if !l.is_empty() => Some(l.to_string()),
-                    _ => None,
-                };
-                code = Some(lang);
-                inline.clear();
-            }
-            Event::End(TagEnd::CodeBlock) => {
-                if let Some(lang) = code.take() {
-                    conv.push_code_block(inline.trim_end_matches('\n'), lang.as_deref());
-                }
-                inline.clear();
-            }
-            Event::Start(Tag::BlockQuote(_)) => {
-                quote = Some(String::new());
-            }
-            Event::End(TagEnd::BlockQuote(_)) => {
-                if let Some(q) = quote.take() {
-                    conv.push_citation(q.trim());
-                }
-            }
-            Event::Start(Tag::Table(_)) => {
-                table = Some(TableCtx {
-                    rows: Vec::new(),
-                    cur: Vec::new(),
-                    in_header: false,
-                });
-            }
-            Event::End(TagEnd::Table) => {
-                if let Some(t) = table.take() {
-                    conv.push_table(&t.rows, None);
-                }
-            }
-            Event::Start(Tag::TableHead) => {
-                if let Some(t) = table.as_mut() {
-                    t.in_header = true;
-                    t.cur.clear();
-                }
-            }
-            Event::End(TagEnd::TableHead) => {
-                if let Some(t) = table.as_mut() {
-                    let row = std::mem::take(&mut t.cur);
-                    if !row.is_empty() {
-                        t.rows.push(row);
-                    }
-                    t.in_header = false;
-                }
-            }
-            Event::Start(Tag::TableRow) => {
-                if let Some(t) = table.as_mut() {
-                    t.cur.clear();
-                }
-            }
-            Event::End(TagEnd::TableRow) => {
-                if let Some(t) = table.as_mut() {
-                    let row = std::mem::take(&mut t.cur);
-                    if !row.is_empty() {
-                        t.rows.push(row);
-                    }
-                }
-            }
-            Event::Start(Tag::TableCell) => {
-                inline.clear();
-            }
-            Event::End(TagEnd::TableCell) => {
-                if let Some(t) = table.as_mut() {
-                    let is_header = t.in_header;
-                    t.cur.push((inline.trim().to_string(), is_header));
-                }
-                inline.clear();
-            }
-            Event::Start(Tag::Image { dest_url, .. }) => {
-                image = Some((dest_url.to_string(), String::new()));
-            }
-            Event::End(TagEnd::Image) => {
-                if let Some((src, alt)) = image.take() {
-                    conv.push_figure(&src, alt.trim(), None);
-                }
-            }
-            // Inline emphasis/links are flattened to their text content.
-            Event::Text(s) => push_text(&mut inline, &mut quote, &mut image, &s),
-            Event::Code(s) => push_text(&mut inline, &mut quote, &mut image, &s),
-            Event::SoftBreak | Event::HardBreak => {
-                push_text(&mut inline, &mut quote, &mut image, " ")
-            }
-            _ => {}
+            blocks.push(format!(
+                r#"<paragraph id="b{block_id}" page="1" role="paragraph">{}</paragraph>"#,
+                xml_escape(&paragraph)
+            ));
+            block_id += 1;
         }
     }
-
-    let blocks = conv.finish();
-    if blocks.is_empty() {
-        return wrap_document(vec![
-            r#"<section id="s1" level="1" page="1">"#.to_string(),
-            r#"<paragraph id="b1" page="1" role="paragraph">Document</paragraph>"#.to_string(),
-            "</section>".to_string(),
-        ]);
+    if open {
+        blocks.push("</section>".to_string());
     }
     wrap_document(blocks)
 }
-
-// ── Typst → semantic XML ──────────────────────────────────────────────────────
-//
-// A pragmatic line-based converter. It covers the common Typst block
-// constructs; full Typst (scripting, `#let`, templates, content functions,
-// math layout) is out of scope and unsupported markup is flattened to text.
 
 fn typst_to_xml(input: &str) -> String {
-    let mut conv = HtmlConverter::new();
-    let mut para: Vec<String> = Vec::new();
-    let lines: Vec<&str> = input.lines().collect();
-    let mut i = 0;
-
-    while i < lines.len() {
-        let line = lines[i];
-        let t = line.trim();
-
-        if t.is_empty() {
-            flush_typst_para(&mut conv, &mut para);
-            i += 1;
-            continue;
+    let mut markdownish = String::new();
+    for line in input.lines() {
+        let trimmed = line.trim();
+        if let Some(title) = trimmed.strip_prefix("= ") {
+            markdownish.push_str("# ");
+            markdownish.push_str(title);
+        } else if let Some(title) = trimmed.strip_prefix("== ") {
+            markdownish.push_str("## ");
+            markdownish.push_str(title);
+        } else {
+            markdownish.push_str(trimmed);
         }
-
-        // Fenced code: ```lang ... ```
-        if let Some(rest) = t.strip_prefix("```") {
-            flush_typst_para(&mut conv, &mut para);
-            let lang = rest.trim();
-            let lang = (!lang.is_empty()).then(|| lang.to_string());
-            let mut code = Vec::new();
-            i += 1;
-            while i < lines.len() && !lines[i].trim_start().starts_with("```") {
-                code.push(lines[i]);
-                i += 1;
-            }
-            i += 1; // skip closing fence
-            conv.push_code_block(&code.join("\n"), lang.as_deref());
-            continue;
-        }
-
-        // Headings: one or more '=' then a space.
-        if let Some((level, title)) = typst_heading(t) {
-            flush_typst_para(&mut conv, &mut para);
-            conv.open_section(level, &strip_typst_inline(title));
-            i += 1;
-            continue;
-        }
-
-        // Figure / image: `image("path")`, optionally inside `#figure(...)`.
-        if let Some(src) = typst_image_src(t) {
-            flush_typst_para(&mut conv, &mut para);
-            let caption = typst_caption(t);
-            conv.push_figure(&src, "", caption.as_deref());
-            i += 1;
-            continue;
-        }
-
-        // Block equation: a line beginning with `$`.
-        if t.starts_with('$') {
-            flush_typst_para(&mut conv, &mut para);
-            let mut buf = vec![t.to_string()];
-            if !(t.len() > 1 && t.ends_with('$')) {
-                i += 1;
-                while i < lines.len() {
-                    let lt = lines[i].trim();
-                    buf.push(lt.to_string());
-                    if lt.ends_with('$') {
-                        break;
-                    }
-                    i += 1;
-                }
-            }
-            i += 1;
-            let joined = buf.join(" ");
-            let inner = joined.trim().trim_matches('$').trim();
-            conv.push_equation(inner);
-            continue;
-        }
-
-        // Lists: consecutive `- ` (unordered) or `+ ` (ordered) items.
-        if is_typst_list_item(t) {
-            flush_typst_para(&mut conv, &mut para);
-            let ordered = t.starts_with("+ ");
-            let mut items = Vec::new();
-            while i < lines.len() {
-                let lt = lines[i].trim();
-                if is_typst_list_item(lt) {
-                    items.push(strip_typst_inline(lt[2..].trim()));
-                    i += 1;
-                } else {
-                    break;
-                }
-            }
-            conv.push_list(&items, ordered);
-            continue;
-        }
-
-        para.push(t.to_string());
-        i += 1;
+        markdownish.push('\n');
     }
-    flush_typst_para(&mut conv, &mut para);
-
-    let blocks = conv.finish();
-    if blocks.is_empty() {
-        return wrap_document(vec![
-            r#"<section id="s1" level="1" page="1">"#.to_string(),
-            r#"<paragraph id="b1" page="1" role="paragraph">Document</paragraph>"#.to_string(),
-            "</section>".to_string(),
-        ]);
-    }
-    wrap_document(blocks)
+    markdown_to_xml(&markdownish)
 }
 
-fn flush_typst_para(conv: &mut HtmlConverter, para: &mut Vec<String>) {
-    if !para.is_empty() {
-        let text = para.join(" ");
-        conv.push_paragraph(&strip_typst_inline(&text));
-        para.clear();
-    }
+fn paragraphs(input: &str) -> Vec<String> {
+    input
+        .split("\n\n")
+        .map(|p| p.lines().map(str::trim).collect::<Vec<_>>().join(" "))
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect()
 }
 
-fn typst_heading(t: &str) -> Option<(usize, &str)> {
-    let eqs = t.chars().take_while(|c| *c == '=').count();
-    if eqs >= 1 && t.as_bytes().get(eqs) == Some(&b' ') {
-        Some((eqs.min(6), t[eqs + 1..].trim()))
+fn markdown_heading(input: &str) -> Option<(usize, &str)> {
+    let hashes = input.chars().take_while(|c| *c == '#').count();
+    if hashes > 0 && hashes <= 6 && input.as_bytes().get(hashes) == Some(&b' ') {
+        Some((hashes, input[hashes + 1..].trim()))
     } else {
         None
     }
-}
-
-fn is_typst_list_item(t: &str) -> bool {
-    t.starts_with("- ") || t.starts_with("+ ")
-}
-
-/// Extract the first `image("...")` source path from a line, if present.
-fn typst_image_src(t: &str) -> Option<String> {
-    let start = t.find("image(")? + "image(".len();
-    let rest = &t[start..];
-    let q1 = rest.find('"')? + 1;
-    let q2 = rest[q1..].find('"')? + q1;
-    Some(rest[q1..q2].to_string())
-}
-
-/// Extract a `caption: [..]` value from a `#figure(...)` line, if present.
-fn typst_caption(t: &str) -> Option<String> {
-    let start = t.find("caption:")? + "caption:".len();
-    let rest = t[start..].trim_start();
-    let open = rest.find('[')? + 1;
-    let close = rest[open..].find(']')? + open;
-    Some(strip_typst_inline(rest[open..close].trim()))
-}
-
-/// Flatten light Typst inline markup. Emphasis markers `*` and inline-code
-/// backticks are removed; other content (including `_`, which is common inside
-/// identifiers) is preserved.
-fn strip_typst_inline(s: &str) -> String {
-    s.chars().filter(|c| *c != '*' && *c != '`').collect()
 }
 
 fn wrap_document(blocks: Vec<String>) -> String {
@@ -818,61 +512,6 @@ fn wrap_document(blocks: Vec<String>) -> String {
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<document version=\"1.0\" id=\"doc1\" lang=\"en\">\n{}\n</document>",
         blocks.join("\n")
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn markdown_extracts_rich_structure() {
-        let md = "# Title\n\nIntro para with **bold** and `code`.\n\n\
-- one\n- two\n\n\
-1. first\n2. second\n\n\
-| A | B |\n|---|---|\n| 1 | 2 |\n\n\
-```rust\nfn main() {}\n```\n\n\
-> a quotation\n\n\
-![alt text](img.png)\n";
-        let xml = markdown_to_xml(md);
-        assert!(xml.contains(r#"<section id="s1" level="1"#));
-        assert!(xml.contains("role=\"title\">Title<"));
-        assert!(xml.contains("<paragraph"));
-        assert!(xml.contains(r#"<list id="b"#) && xml.contains(r#"type="unordered""#));
-        assert!(xml.contains(r#"type="ordered""#), "ordered list: {xml}");
-        assert!(xml.contains("<table") && xml.contains("<cell header=\"true\">A<"));
-        assert!(xml.contains(r#"<codeBlock id="b"# ) && xml.contains(r#"language="rust""#));
-        assert!(xml.contains("fn main() {}"));
-        assert!(xml.contains("<citation") && xml.contains("a quotation"));
-        assert!(xml.contains("<figure") && xml.contains(r#"src="img.png""#));
-        assert!(xml.contains(r#"alt="alt text""#));
-        // emphasis is flattened, not literal markers
-        assert!(xml.contains("bold and code"));
-        crate::xml::validate_xml(&xml).expect("generated markdown XML must validate");
-    }
-
-    #[test]
-    fn typst_extracts_rich_structure() {
-        let typ = "= Title\n\n\
-Intro with *bold* text.\n\n\
-== Subsection\n\n\
-- alpha\n- beta\n\n\
-+ first\n+ second\n\n\
-```python\nprint(1)\n```\n\n\
-$ E = m c^2 $\n\n\
-#figure(image(\"chart.png\"), caption: [A *chart*])\n";
-        let xml = typst_to_xml(typ);
-        assert!(xml.contains("role=\"title\">Title<"));
-        assert!(xml.contains(r#"level="2""#), "subsection level: {xml}");
-        assert!(xml.contains(r#"type="unordered""#) && xml.contains(">alpha<"));
-        assert!(xml.contains(r#"type="ordered""#) && xml.contains(">first<"));
-        assert!(xml.contains(r#"language="python""#) && xml.contains("print(1)"));
-        assert!(xml.contains("<equation") && xml.contains("E = m c^2"));
-        assert!(xml.contains("<figure") && xml.contains(r#"src="chart.png""#));
-        assert!(xml.contains("A chart"), "caption flattened: {xml}");
-        // bold markers stripped
-        assert!(xml.contains("bold text") && !xml.contains("*bold*"));
-        crate::xml::validate_xml(&xml).expect("generated typst XML must validate");
-    }
 }
 
 pub(crate) fn xml_escape(input: &str) -> String {

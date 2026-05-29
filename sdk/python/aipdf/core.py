@@ -14,18 +14,14 @@ except ImportError as exc:  # pragma: no cover
     _brotli_import_error = exc
 
 
-# Conformant PDF name for MIME application/aipdf+xml+br ('/' escaped as #2F).
-SEMANTIC_SUBTYPE = b"/application#2Faipdf+xml+br"
+SEMANTIC_SUBTYPE = b"/application#aipdf+xml+br"
 SEMANTIC_FILENAME = "aipdf-semantic.xml.br"
-# Kept in lockstep with the Rust core (security.rs) and TypeScript SDK.
 DISALLOWED_MARKERS = (
     "<!DOCTYPE",
     "<?xml-stylesheet",
-    "<?processing",
     "<script",
     "/JavaScript",
     "/Launch",
-    "prompt:",
     "system prompt",
     "model directive",
 )
@@ -226,7 +222,7 @@ def render_children(elem: ET.Element, lines: list[str], level: int) -> None:
             lines.append(f"![{alt}]({src})")
             lines.append("")
             if cap:
-                lines.append(f"_{cap}_")
+                lines.append(cap)
                 lines.append("")
         elif child.tag == "definitionList":
             for defn in child.findall("definition"):
@@ -238,12 +234,6 @@ def render_children(elem: ET.Element, lines: list[str], level: int) -> None:
 
 
 def render_table(table: ET.Element, lines: list[str]) -> None:
-    cap_elem = table.find("caption")
-    if cap_elem is not None:
-        cap = text_of(cap_elem)
-        if cap:
-            lines.append(f"_{cap}_")
-            lines.append("")
     collected_rows: list[list[str]] = []
     thead = table.find("thead")
     if thead is not None:
@@ -353,9 +343,7 @@ def xml_to_onto(xml: str) -> str:
     _onto_columns(lines, "Blocks", blocks, ["id", "kind", "section_id", "level", "page", "bbox", "role", "text"])
     lines.append("")
     table_rows = [dict(t, rows="|".join("^".join(_onto_array_scalar(cell) for cell in row) for row in t["rows"])) for t in tables]
-    # `rows` is pre-serialized with raw ^ / | delimiters and must NOT be
-    # scalar-encoded again (mirrors the Rust core's column_raw handling).
-    _onto_columns(lines, "Tables", table_rows, ["id", "page", "bbox", "caption", "rows"], raw_fields={"rows"})
+    _onto_columns(lines, "Tables", table_rows, ["id", "page", "bbox", "caption", "rows"])
     lines.append("")
     _onto_columns(lines, "Figures", figures, ["id", "page", "bbox", "caption", "alt", "source"])
     lines.append("")
@@ -363,20 +351,10 @@ def xml_to_onto(xml: str) -> str:
     return "\n".join(lines).rstrip()
 
 
-def _onto_columns(
-    lines: list[str],
-    name: str,
-    records: list[dict[str, object]],
-    fields: list[str],
-    raw_fields: set[str] = frozenset(),
-) -> None:
+def _onto_columns(lines: list[str], name: str, records: list[dict[str, object]], fields: list[str]) -> None:
     lines.append(f"{name}[{len(records)}]:")
     for field in fields:
-        if field in raw_fields:
-            cells = (str(record.get(field, "")) for record in records)
-        else:
-            cells = (_onto_scalar(str(record.get(field, ""))) for record in records)
-        lines.append(f"    {field}: " + "|".join(cells))
+        lines.append(f"    {field}: " + "|".join(_onto_scalar(str(record.get(field, ""))) for record in records))
 
 
 def _onto_field(lines: list[str], name: str, value: str) -> None:

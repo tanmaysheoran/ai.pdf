@@ -1,47 +1,10 @@
-use crate::font::{self, Font, GlyphSet};
 use crate::source::xml_escape;
 use quick_xml::events::Event;
-use quick_xml::{Reader, Writer};
+use quick_xml::Reader;
 use sha2::{Digest, Sha256};
-use std::path::{Path, PathBuf};
-
-/// A decoded raster image ready to embed as a `/DeviceRGB` `/FlateDecode` XObject.
-struct EncodedImage {
-    width: u32,
-    height: u32,
-    /// zlib-compressed 8-bit RGB samples (row-major, w*h*3 bytes uncompressed).
-    data: Vec<u8>,
-}
-
-/// An image XObject placed on a page, named `/Im{n}` in the content stream.
-struct ImageObj {
-    name: String,
-    enc: EncodedImage,
-}
-
-/// Decode an image file to RGB8 (alpha dropped) and zlib-compress its samples.
-/// Returns None for missing/unreadable/remote sources so the caller can fall
-/// back to a labelled placeholder.
-fn load_image(base_dir: Option<&Path>, src: &str) -> Option<EncodedImage> {
-    if src.is_empty() || src.starts_with("http://") || src.starts_with("https://") {
-        return None; // the semantic layer stores no network references
-    }
-    let path = match base_dir {
-        Some(dir) => dir.join(src),
-        None => PathBuf::from(src),
-    };
-    let img = image::open(&path).ok()?.to_rgb8();
-    let (width, height) = img.dimensions();
-    Some(EncodedImage {
-        width,
-        height,
-        data: font::flate(&img.into_raw()),
-    })
-}
 
 const SEMANTIC_FILENAME: &str = "aipdf-semantic.xml.br";
-// Conformant PDF name for MIME `application/aipdf+xml+br` (`/` escaped as `#2F`).
-const SEMANTIC_SUBTYPE: &str = "/application#2Faipdf+xml+br";
+const SEMANTIC_SUBTYPE: &str = "/application#aipdf+xml+br";
 
 // ── Page geometry ─────────────────────────────────────────────────────────────
 
@@ -89,19 +52,124 @@ impl Default for PageOptions {
     }
 }
 
-// ── Text measurement (font-driven) ────────────────────────────────────────────
+// ── Adobe Helvetica metrics (1/1000 pt) ──────────────────────────────────────
 
-fn wrap_words(font: &Font, text: &str, size: f32, max_width: f32) -> Vec<String> {
+fn helvetica_width(c: char) -> f32 {
+    match c {
+        ' ' => 278.0,
+        '!' => 278.0,
+        '"' => 355.0,
+        '#' => 556.0,
+        '$' => 556.0,
+        '%' => 889.0,
+        '&' => 667.0,
+        '\'' => 191.0,
+        '(' => 333.0,
+        ')' => 333.0,
+        '*' => 389.0,
+        '+' => 584.0,
+        ',' => 278.0,
+        '-' => 333.0,
+        '.' => 278.0,
+        '/' => 278.0,
+        '0'..='9' => 556.0,
+        ':' => 278.0,
+        ';' => 278.0,
+        '<' | '>' => 584.0,
+        '=' => 584.0,
+        '?' => 556.0,
+        '@' => 1015.0,
+        'A' => 667.0,
+        'B' => 667.0,
+        'C' => 722.0,
+        'D' => 722.0,
+        'E' => 667.0,
+        'F' => 611.0,
+        'G' => 778.0,
+        'H' => 722.0,
+        'I' => 278.0,
+        'J' => 500.0,
+        'K' => 667.0,
+        'L' => 556.0,
+        'M' => 833.0,
+        'N' => 722.0,
+        'O' => 778.0,
+        'P' => 667.0,
+        'Q' => 778.0,
+        'R' => 722.0,
+        'S' => 667.0,
+        'T' => 611.0,
+        'U' => 722.0,
+        'V' => 667.0,
+        'W' => 944.0,
+        'X' => 667.0,
+        'Y' => 667.0,
+        'Z' => 611.0,
+        '[' | ']' => 278.0,
+        '\\' => 278.0,
+        '^' => 469.0,
+        '_' => 556.0,
+        '`' => 333.0,
+        'a' => 556.0,
+        'b' => 556.0,
+        'c' => 500.0,
+        'd' => 556.0,
+        'e' => 556.0,
+        'f' => 278.0,
+        'g' => 556.0,
+        'h' => 556.0,
+        'i' => 222.0,
+        'j' => 222.0,
+        'k' => 500.0,
+        'l' => 222.0,
+        'm' => 833.0,
+        'n' => 556.0,
+        'o' => 556.0,
+        'p' => 556.0,
+        'q' => 556.0,
+        'r' => 333.0,
+        's' => 500.0,
+        't' => 278.0,
+        'u' => 556.0,
+        'v' => 500.0,
+        'w' => 722.0,
+        'x' => 500.0,
+        'y' => 500.0,
+        'z' => 500.0,
+        '{' | '}' => 334.0,
+        '|' => 260.0,
+        '~' => 584.0,
+        _ => 556.0,
+    }
+}
+
+fn measure_width(text: &str, font_size: f32, bold: bool) -> f32 {
+    if bold {
+        text.chars()
+            .map(|c| helvetica_width(c) * 1.05 * font_size / 1000.0)
+            .sum()
+    } else {
+        text.chars()
+            .map(|c| helvetica_width(c) * font_size / 1000.0)
+            .sum()
+    }
+}
+
+fn measure_mono_width(text: &str, font_size: f32) -> f32 {
+    text.chars().count() as f32 * 600.0 * font_size / 1000.0
+}
+
+fn wrap_words(text: &str, font_size: f32, bold: bool, max_width: f32) -> Vec<String> {
     if text.trim().is_empty() {
         return vec![];
     }
-    let space_w = font.text_width(" ", size);
+    let space_w = 278.0 * if bold { 1.05 } else { 1.0 } * font_size / 1000.0;
     let mut lines = Vec::new();
     let mut cur = String::new();
     let mut cur_w = 0.0f32;
 
     for word in text.split_whitespace() {
-        let w = font.text_width(word, size);
+        let w = measure_width(word, font_size, bold);
         if cur.is_empty() {
             cur = word.to_string();
             cur_w = w;
@@ -126,22 +194,14 @@ fn wrap_words(font: &Font, text: &str, size: f32, max_width: f32) -> Vec<String>
 #[derive(Debug)]
 enum DocElem {
     DocTitle(String),
-    Heading { level: usize, text: String, id: Option<String> },
-    Paragraph { text: String, id: Option<String> },
-    Table { caption: Option<String>, rows: Vec<Vec<String>>, id: Option<String> },
-    CodeBlock { language: Option<String>, text: String, id: Option<String> },
-    List { ordered: bool, items: Vec<String>, id: Option<String> },
-    Citation { text: String, id: Option<String> },
-    Note { text: String, id: Option<String> },
-    Figure { alt: String, src: String, caption: Option<String>, id: Option<String> },
-}
-
-/// Page + bounding box recorded for a block during layout (PDF user-space
-/// points, page-local, origin bottom-left). Written back into the semantic XML.
-struct BlockCoord {
-    id: String,
-    page: usize,
-    bbox: (f32, f32, f32, f32),
+    Heading { level: usize, text: String },
+    Paragraph(String),
+    Table { caption: Option<String>, rows: Vec<Vec<String>> },
+    CodeBlock { language: Option<String>, text: String },
+    List { ordered: bool, items: Vec<String> },
+    Citation(String),
+    Note(String),
+    Figure { alt: String, src: String, caption: Option<String> },
 }
 
 fn parse_elements(xml: &str) -> Vec<DocElem> {
@@ -169,11 +229,6 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
     let mut in_code = false;
     let mut code_lang: Option<String> = None;
     let mut current = String::new();
-    // Captured `id` of the block currently being assembled.
-    let mut block_id: Option<String> = None;
-    let mut list_id: Option<String> = None;
-    let mut table_id: Option<String> = None;
-    let mut fig_id: Option<String> = None;
 
     // list state
     let mut in_list = false;
@@ -213,38 +268,31 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                     }
                     "title" if !in_meta && !in_table => {
                         in_title = true;
-                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "paragraph" => {
                         in_para = true;
-                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "citation" => {
                         in_citation = true;
-                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "equation" => {
                         in_equation = true;
-                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "note" | "footnote" if !in_table => {
                         in_note = true;
-                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "codeBlock" => {
                         in_code = true;
                         code_lang = attr_val(&e, b"language");
-                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "list" => {
                         in_list = true;
-                        list_id = attr_val(&e, b"id");
                         list_ordered = attr_val(&e, b"type")
                             .map(|t| t == "ordered")
                             .unwrap_or(false);
@@ -256,18 +304,15 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                     }
                     "references" => {
                         in_list = true;
-                        list_id = attr_val(&e, b"id");
                         list_ordered = false;
                         list_items.clear();
                     }
                     "reference" if !in_list => {
                         in_reference = true;
-                        block_id = attr_val(&e, b"id");
                         current.clear();
                     }
                     "table" if !in_meta => {
                         in_table = true;
-                        table_id = attr_val(&e, b"id");
                         table_caption = None;
                         table_rows.clear();
                     }
@@ -285,7 +330,6 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                     }
                     "figure" => {
                         in_figure = true;
-                        fig_id = attr_val(&e, b"id");
                         fig_src.clear();
                         fig_alt.clear();
                         fig_caption = None;
@@ -336,38 +380,28 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                         elems.push(DocElem::Heading {
                             level: section_level,
                             text: current.trim().to_string(),
-                            id: block_id.take(),
                         });
                         in_title = false;
                     }
                     "paragraph" if in_para => {
                         if !current.trim().is_empty() {
-                            elems.push(DocElem::Paragraph {
-                                text: current.trim().to_string(),
-                                id: block_id.take(),
-                            });
+                            elems.push(DocElem::Paragraph(current.trim().to_string()));
                         }
                         in_para = false;
                     }
                     "citation" if in_citation => {
-                        elems.push(DocElem::Citation {
-                            text: current.trim().to_string(),
-                            id: block_id.take(),
-                        });
+                        elems.push(DocElem::Citation(current.trim().to_string()));
                         in_citation = false;
                     }
                     "equation" if in_equation => {
-                        elems.push(DocElem::Paragraph {
-                            text: format!("[ {} ]", current.trim()),
-                            id: block_id.take(),
-                        });
+                        elems.push(DocElem::Paragraph(format!(
+                            "[ {} ]",
+                            current.trim()
+                        )));
                         in_equation = false;
                     }
                     "note" | "footnote" if in_note => {
-                        elems.push(DocElem::Note {
-                            text: current.trim().to_string(),
-                            id: block_id.take(),
-                        });
+                        elems.push(DocElem::Note(current.trim().to_string()));
                         in_note = false;
                         _in_footnote = false;
                     }
@@ -375,7 +409,6 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                         elems.push(DocElem::CodeBlock {
                             language: code_lang.take(),
                             text: current.trim().to_string(),
-                            id: block_id.take(),
                         });
                         in_code = false;
                     }
@@ -388,17 +421,13 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                             elems.push(DocElem::List {
                                 ordered: list_ordered,
                                 items: list_items.clone(),
-                                id: list_id.take(),
                             });
                         }
                         in_list = false;
                     }
                     "reference" if in_reference => {
                         if !current.trim().is_empty() {
-                            elems.push(DocElem::Paragraph {
-                                text: current.trim().to_string(),
-                                id: block_id.take(),
-                            });
+                            elems.push(DocElem::Paragraph(current.trim().to_string()));
                         }
                         in_reference = false;
                     }
@@ -421,7 +450,6 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                             elems.push(DocElem::Table {
                                 caption: table_caption.take(),
                                 rows: table_rows.clone(),
-                                id: table_id.take(),
                             });
                         }
                         in_table = false;
@@ -435,7 +463,6 @@ fn parse_elements(xml: &str) -> Vec<DocElem> {
                             alt: fig_alt.clone(),
                             src: fig_src.clone(),
                             caption: fig_caption.take(),
-                            id: fig_id.take(),
                         });
                         in_figure = false;
                     }
@@ -460,13 +487,8 @@ fn attr_val(e: &quick_xml::events::BytesStart<'_>, key: &[u8]) -> Option<String>
 
 struct Layout {
     opts: PageOptions,
-    font: Font,
-    glyphs: GlyphSet,
-    base_dir: Option<PathBuf>,
-    images: Vec<ImageObj>,
-    coords: Vec<BlockCoord>,
-    pages: Vec<String>, // completed page content streams
-    current: String,    // current page content stream
+    pages: Vec<String>,       // completed page content streams
+    current: String,          // current page content stream
     cursor_y: f32,
     page_num: usize,
 }
@@ -480,15 +502,10 @@ const SECTION_SPACE: f32 = 16.0;
 const FOOTER_H: f32 = 20.0;
 
 impl Layout {
-    fn new(opts: PageOptions, font: Font, base_dir: Option<PathBuf>) -> Self {
+    fn new(opts: PageOptions) -> Self {
         let top = opts.height - opts.margin_top;
         let mut this = Self {
             opts,
-            font,
-            glyphs: GlyphSet::new(),
-            base_dir,
-            images: Vec::new(),
-            coords: Vec::new(),
             pages: Vec::new(),
             current: String::new(),
             cursor_y: top,
@@ -502,28 +519,17 @@ impl Layout {
         self.current.clear();
     }
 
-    fn measure(&self, text: &str, size: f32) -> f32 {
-        self.font.text_width(text, size)
-    }
-
-    fn wrap(&self, text: &str, size: f32, max_width: f32) -> Vec<String> {
-        wrap_words(&self.font, text, size, max_width)
-    }
-
-    /// Encode one line to a content-stream hex GID string, recording glyphs.
-    fn hex(&mut self, line: &str) -> String {
-        self.glyphs.encode_hex(&self.font, line)
-    }
-
     fn finish_page(&mut self) {
         // Footer: "Page N" centered
         let footer_text = format!("Page {}", self.page_num);
-        let fw = self.measure(&footer_text, 9.0);
+        let fw = measure_width(&footer_text, 9.0, false);
         let fx = self.opts.margin_left + (self.opts.content_width() - fw) / 2.0;
         let fy = self.opts.margin_bottom / 2.0;
-        let h = self.hex(&footer_text);
         self.current.push_str(&format!(
-            "BT\n/F1 9 Tf\n{fx:.2} {fy:.2} Td\n<{h}> Tj\nET\n"
+            "BT\n/F1 9 Tf\n{} {} Td\n({}) Tj\nET\n",
+            fx,
+            fy,
+            pdf_str(&footer_text)
         ));
         self.pages.push(self.current.clone());
         self.current.clear();
@@ -542,44 +548,29 @@ impl Layout {
         }
     }
 
-    /// Draw word-wrapped lines starting at the cursor, advancing it downward.
-    /// `bold` synthesizes a heavier weight from the single embedded face via the
-    /// fill+stroke text render mode, isolated inside a q/Q so it cannot leak.
-    fn draw_text_lines(&mut self, lines: &[String], x: f32, size: f32, leading: f32, bold: bool) {
+    fn draw_text_lines(
+        &mut self,
+        lines: &[String],
+        x: f32,
+        font: &str,
+        size: f32,
+        leading: f32,
+    ) {
         if lines.is_empty() {
             return;
         }
-        if bold {
-            self.current
-                .push_str(&format!("q 2 Tr {:.2} w 0 G\n", size * 0.03));
-        }
         self.current.push_str(&format!(
-            "BT\n/F1 {size:.1} Tf\n{x:.2} {:.2} Td\n{leading:.1} TL\n",
-            self.cursor_y
+            "BT\n/{font} {size:.1} Tf\n{} {} Td\n{} TL\n",
+            x,
+            self.cursor_y,
+            leading
         ));
         for line in lines {
-            let h = self.hex(line);
-            self.current.push_str(&format!("<{h}> Tj\nT*\n"));
+            self.current
+                .push_str(&format!("({}) Tj\nT*\n", pdf_str(line)));
         }
         self.current.push_str("ET\n");
-        if bold {
-            self.current.push_str("Q\n");
-        }
         self.cursor_y -= lines.len() as f32 * leading;
-    }
-
-    /// Draw a single line at an absolute (x, y) without moving the cursor.
-    fn draw_single(&mut self, text: &str, x: f32, y: f32, size: f32, bold: bool) {
-        let h = self.hex(text);
-        if bold {
-            self.current
-                .push_str(&format!("q 2 Tr {:.2} w 0 G\n", size * 0.03));
-        }
-        self.current
-            .push_str(&format!("BT\n/F1 {size:.1} Tf\n{x:.2} {y:.2} Td\n<{h}> Tj\nET\n"));
-        if bold {
-            self.current.push_str("Q\n");
-        }
     }
 
     fn add_space(&mut self, pts: f32) {
@@ -591,17 +582,27 @@ impl Layout {
     fn render_doc_title(&mut self, text: &str) {
         let size = 22.0;
         let leading = 28.0;
-        let lines = self.wrap(text, size, self.opts.content_width());
+        let lines = wrap_words(text, size, true, self.opts.content_width());
         let needed = lines.len() as f32 * leading + SECTION_SPACE * 2.0;
         self.ensure_space(needed);
+        // Center the title
+        let x = self.opts.margin_left;
+        self.current.push_str(&format!(
+            "BT\n/F2 {size:.1} Tf\n{x} {} Td\n{leading} TL\n",
+            self.cursor_y
+        ));
         for line in &lines {
-            let w = self.measure(line, size);
-            let x = self.opts.margin_left + ((self.opts.content_width() - w) / 2.0).max(0.0);
-            let y = self.cursor_y;
-            self.draw_single(line, x, y, size, true);
-            self.cursor_y -= leading;
+            let w = measure_width(line, size, true);
+            let offset = ((self.opts.content_width() - w) / 2.0).max(0.0);
+            self.current.push_str(&format!(
+                "({}) Tj\nT*\n",
+                pdf_str(&format!("{}{}", " ".repeat((offset / (size * 0.278)) as usize), line))
+            ));
         }
+        self.current.push_str("ET\n");
+        self.cursor_y -= lines.len() as f32 * leading;
         self.add_space(SECTION_SPACE);
+        // Horizontal rule
         self.draw_hline(0.5, 0.3);
         self.add_space(SECTION_SPACE);
     }
@@ -613,11 +614,11 @@ impl Layout {
             3 => (12.0, 17.0, 10.0),
             _ => (11.0, 15.4, 8.0),
         };
-        let lines = self.wrap(text, size, self.opts.content_width());
+        let lines = wrap_words(text, size, true, self.opts.content_width());
         let needed = lines.len() as f32 * leading + space_before + 6.0;
         self.ensure_space(needed);
         self.add_space(space_before);
-        self.draw_text_lines(&lines, self.opts.margin_left, size, leading, true);
+        self.draw_text_lines(&lines, self.opts.margin_left, "F2", size, leading);
         self.add_space(6.0);
         if level <= 2 {
             self.draw_hline(0.5, 0.6);
@@ -626,13 +627,13 @@ impl Layout {
     }
 
     fn render_paragraph(&mut self, text: &str) {
-        let lines = self.wrap(text, BODY_SIZE, self.opts.content_width());
+        let lines = wrap_words(text, BODY_SIZE, false, self.opts.content_width());
         if lines.is_empty() {
             return;
         }
         let needed = lines.len() as f32 * BODY_LEAD + PARA_SPACE;
         self.ensure_space(needed);
-        self.draw_text_lines(&lines, self.opts.margin_left, BODY_SIZE, BODY_LEAD, false);
+        self.draw_text_lines(&lines, self.opts.margin_left, "F1", BODY_SIZE, BODY_LEAD);
         self.add_space(PARA_SPACE);
     }
 
@@ -640,7 +641,7 @@ impl Layout {
         let indent = 20.0;
         let x = self.opts.margin_left + indent;
         let w = self.opts.content_width() - indent;
-        let lines = self.wrap(text, BODY_SIZE, w);
+        let lines = wrap_words(text, BODY_SIZE, false, w);
         if lines.is_empty() {
             return;
         }
@@ -648,19 +649,20 @@ impl Layout {
         let needed = block_h + PARA_SPACE * 2.0;
         self.ensure_space(needed);
         self.add_space(PARA_SPACE / 2.0);
+        // Left vertical bar
         let bar_x = self.opts.margin_left + 4.0;
         let bar_top = self.cursor_y + BODY_SIZE * 0.2;
         let bar_bot = self.cursor_y - block_h;
         self.current.push_str(&format!(
-            "q 0.4 G 2 w {bar_x:.2} {bar_top:.2} m {bar_x:.2} {bar_bot:.2} l S Q\n"
+            "q 0.4 G 2 w {bar_x} {bar_top} m {bar_x} {bar_bot} l S Q\n"
         ));
-        self.draw_text_lines(&lines, x, BODY_SIZE, BODY_LEAD, false);
+        self.draw_text_lines(&lines, x, "F1", BODY_SIZE, BODY_LEAD);
         self.add_space(PARA_SPACE);
     }
 
     fn render_note(&mut self, text: &str) {
         let prefixed = format!("Note: {text}");
-        let lines = self.wrap(&prefixed, BODY_SIZE, self.opts.content_width() - 10.0);
+        let lines = wrap_words(&prefixed, BODY_SIZE, false, self.opts.content_width() - 10.0);
         if lines.is_empty() {
             return;
         }
@@ -668,28 +670,32 @@ impl Layout {
         self.ensure_space(block_h + PARA_SPACE);
         let bx = self.opts.margin_left;
         let by = self.cursor_y - block_h + 4.0;
+        // Light gray background
         self.current.push_str(&format!(
-            "q 0.93 g {bx:.2} {by:.2} {:.2} {block_h:.2} re f Q\n",
+            "q 0.93 g {bx} {by} {} {block_h} re f Q\n",
             self.opts.content_width()
         ));
         self.add_space(4.0);
-        self.draw_text_lines(&lines, bx + 6.0, BODY_SIZE, BODY_LEAD, false);
+        self.draw_text_lines(&lines, bx + 6.0, "F1", BODY_SIZE, BODY_LEAD);
         self.add_space(PARA_SPACE);
     }
 
     fn render_code_block(&mut self, text: &str, _language: Option<&str>) {
+        // Split into lines, word-wrap long lines at content width
         let raw_lines: Vec<&str> = text.lines().collect();
+        // Soft-wrap each raw line at code content width
         let code_width = self.opts.content_width() - 16.0;
-        // Approximate a monospace cell from the embedded font's digit width.
-        let char_w = self.measure("0", CODE_SIZE).max(1.0);
         let mut wrapped: Vec<String> = Vec::new();
         for raw in &raw_lines {
             if raw.is_empty() {
                 wrapped.push(String::new());
-            } else if self.measure(raw, CODE_SIZE) <= code_width {
+            } else if measure_mono_width(raw, CODE_SIZE) <= code_width {
                 wrapped.push(raw.to_string());
             } else {
-                let chars_per_line = (code_width / char_w).floor().max(1.0) as usize;
+                // Split at character boundary
+                let chars_per_line =
+                    (code_width / (600.0 * CODE_SIZE / 1000.0)).floor() as usize;
+                let chars_per_line = chars_per_line.max(1);
                 let mut rest = raw.chars().collect::<Vec<_>>();
                 while !rest.is_empty() {
                     let chunk: String = rest.drain(..rest.len().min(chars_per_line)).collect();
@@ -702,12 +708,26 @@ impl Layout {
         self.ensure_space(block_h + PARA_SPACE);
         let bx = self.opts.margin_left;
         let by = self.cursor_y - block_h + 4.0;
+        // Gray background box
         self.current.push_str(&format!(
-            "q 0.92 g {bx:.2} {by:.2} {w:.2} {block_h:.2} re f 0.75 G 0.5 w {bx:.2} {by:.2} {w:.2} {block_h:.2} re S Q\n",
-            w = self.opts.content_width()
+            "q 0.92 g {bx} {by} {} {block_h} re f 0.75 G 0.5 w {bx} {by} {} {block_h} re S Q\n",
+            self.opts.content_width(),
+            self.opts.content_width()
         ));
         self.add_space(6.0);
-        self.draw_text_lines(&wrapped, bx + 8.0, CODE_SIZE, CODE_LEAD, false);
+        if !wrapped.is_empty() {
+            self.current.push_str(&format!(
+                "BT\n/F3 {CODE_SIZE:.1} Tf\n{} {} Td\n{CODE_LEAD} TL\n",
+                bx + 8.0,
+                self.cursor_y
+            ));
+            for line in &wrapped {
+                self.current
+                    .push_str(&format!("({}) Tj\nT*\n", pdf_str(line)));
+            }
+            self.current.push_str("ET\n");
+            self.cursor_y -= wrapped.len() as f32 * CODE_LEAD;
+        }
         self.add_space(6.0 + PARA_SPACE);
     }
 
@@ -724,9 +744,9 @@ impl Layout {
                 let bullet = if ordered {
                     format!("{}.", i + 1)
                 } else {
-                    "\u{2022}".to_string()
+                    "\u{2022}".to_string() // bullet char
                 };
-                let wrapped = self.wrap(item, BODY_SIZE, text_w);
+                let wrapped = wrap_words(item, BODY_SIZE, false, text_w);
                 (bullet, wrapped)
             })
             .collect();
@@ -743,9 +763,13 @@ impl Layout {
             if lines.is_empty() {
                 continue;
             }
-            let by = self.cursor_y;
-            self.draw_single(bullet, bullet_x, by, BODY_SIZE, false);
-            self.draw_text_lines(lines, text_x, BODY_SIZE, BODY_LEAD, false);
+            // bullet marker
+            self.current.push_str(&format!(
+                "BT\n/F1 {BODY_SIZE:.1} Tf\n{bullet_x} {} Td\n({}) Tj\nET\n",
+                self.cursor_y,
+                pdf_str(bullet)
+            ));
+            self.draw_text_lines(lines, text_x, "F1", BODY_SIZE, BODY_LEAD);
         }
         self.add_space(PARA_SPACE);
     }
@@ -762,13 +786,14 @@ impl Layout {
             + PARA_SPACE;
 
         if total_h > self.available_y() * 0.9 {
+            // Table too big for current page — push to next
             self.finish_page();
             self.begin_page();
         }
 
         if let Some(cap) = caption {
-            let lines = self.wrap(cap, BODY_SIZE - 1.0, self.opts.content_width());
-            self.draw_text_lines(&lines, self.opts.margin_left, BODY_SIZE - 1.0, BODY_LEAD, true);
+            let lines = wrap_words(cap, BODY_SIZE - 1.0, true, self.opts.content_width());
+            self.draw_text_lines(&lines, self.opts.margin_left, "F2", BODY_SIZE - 1.0, BODY_LEAD);
             self.add_space(PARA_SPACE / 2.0);
         }
 
@@ -779,46 +804,59 @@ impl Layout {
             let y_top = self.cursor_y;
             let y_bot = y_top - row_h;
 
+            // Header fill
             if is_header {
                 self.current.push_str(&format!(
-                    "q 0.85 g {tbl_x:.2} {y_bot:.2} {:.2} {row_h:.2} re f Q\n",
+                    "q 0.85 g {tbl_x} {y_bot} {} {row_h} re f Q\n",
                     self.opts.content_width()
                 ));
             }
 
+            // Cell text + vertical dividers
             for (ci, cell) in row.iter().enumerate() {
                 let cx = tbl_x + ci as f32 * col_w;
                 let text_x = cx + 4.0;
                 let available_w = col_w - 8.0;
-                let lines = self.wrap(cell, BODY_SIZE, available_w);
-                let text = lines.first().cloned().unwrap_or_default();
+                let lines = wrap_words(cell, BODY_SIZE, is_header, available_w);
+                let font = if is_header { "F2" } else { "F1" };
+                // Single line render per cell (truncate if overflow)
+                let text = lines.first().map(String::as_str).unwrap_or("");
                 let text_y = y_top - BODY_SIZE - 3.0;
-                self.draw_single(&text, text_x, text_y, BODY_SIZE, is_header);
+                self.current.push_str(&format!(
+                    "BT\n/{font} {BODY_SIZE:.1} Tf\n{text_x} {text_y} Td\n({}) Tj\nET\n",
+                    pdf_str(text)
+                ));
+                // Vertical line after cell (except last)
                 if ci < ncols - 1 {
                     let vx = cx + col_w;
                     self.current.push_str(&format!(
-                        "q 0.5 G 0.5 w {vx:.2} {y_top:.2} m {vx:.2} {y_bot:.2} l S Q\n"
+                        "q 0.5 G 0.5 w {vx} {y_top} m {vx} {y_bot} l S Q\n"
                     ));
                 }
             }
 
+            // Horizontal rule between rows
             self.current.push_str(&format!(
-                "q 0.4 G 0.5 w {tbl_x:.2} {y_bot:.2} m {:.2} {y_bot:.2} l S Q\n",
+                "q 0.4 G 0.5 w {tbl_x} {y_bot} m {} {y_bot} l S Q\n",
                 tbl_x + self.opts.content_width()
             ));
 
             self.cursor_y -= row_h;
 
+            // Check if we need a new page mid-table (for very long tables)
             if ri < rows.len() - 1 && self.available_y() < row_h * 2.0 {
+                // Draw left/right borders for what we have, then new page
                 self.finish_page();
                 self.begin_page();
             }
         }
 
+        // Outer border
         let tbl_top = self.cursor_y + rows.len() as f32 * row_h;
         let tbl_bot = self.cursor_y;
+        let _tbl_right = tbl_x + self.opts.content_width();
         self.current.push_str(&format!(
-            "q 0.4 G 0.5 w {tbl_x:.2} {tbl_bot:.2} {w:.2} {h:.2} re S Q\n",
+            "q 0.4 G 0.5 w {tbl_x} {tbl_bot} {w} {h} re S Q\n",
             w = self.opts.content_width(),
             h = tbl_top - tbl_bot
         ));
@@ -827,57 +865,15 @@ impl Layout {
     }
 
     fn render_figure(&mut self, alt: &str, src: &str, caption: Option<&str>) {
-        let bw = self.opts.content_width();
-        // Try to embed the real raster; fall back to a labelled placeholder.
-        match load_image(self.base_dir.as_deref(), src) {
-            Some(enc) => self.draw_image(enc),
-            None => self.draw_figure_placeholder(alt, src),
-        }
-        if let Some(cap) = caption {
-            self.add_space(4.0);
-            let cap_lines = self.wrap(cap, BODY_SIZE - 1.0, bw);
-            for line in &cap_lines {
-                let lw = self.measure(line, BODY_SIZE - 1.0);
-                let lx = self.opts.margin_left + (bw - lw) / 2.0;
-                let y = self.cursor_y;
-                self.draw_single(line, lx, y, BODY_SIZE - 1.0, false);
-                self.cursor_y -= BODY_LEAD;
-            }
-        }
-        self.add_space(PARA_SPACE);
-    }
-
-    fn draw_image(&mut self, enc: EncodedImage) {
-        let bw = self.opts.content_width();
-        // Scale to content width, preserving aspect ratio, capped to ~80% of
-        // the printable page height.
-        let aspect = enc.height as f32 / enc.width as f32;
-        let mut dw = bw;
-        let mut dh = dw * aspect;
-        let max_h = (self.opts.height - self.opts.margin_top - self.opts.margin_bottom) * 0.8;
-        if dh > max_h {
-            dh = max_h;
-            dw = dh / aspect;
-        }
-        self.ensure_space(dh + PARA_SPACE * 2.0);
-        let name = format!("Im{}", self.images.len() + 1);
-        let x = self.opts.margin_left + (bw - dw) / 2.0;
-        let y = self.cursor_y - dh;
-        // Image space is the unit square; cm scales/translates it into place.
-        self.current
-            .push_str(&format!("q {dw:.2} 0 0 {dh:.2} {x:.2} {y:.2} cm /{name} Do Q\n"));
-        self.images.push(ImageObj { name, enc });
-        self.cursor_y -= dh;
-    }
-
-    fn draw_figure_placeholder(&mut self, alt: &str, src: &str) {
+        // Render a placeholder box with alt text
         let box_h = 80.0;
-        self.ensure_space(box_h + PARA_SPACE * 2.0);
+        let needed = box_h + PARA_SPACE * 2.0 + caption.map(|_| BODY_LEAD + 4.0).unwrap_or(0.0);
+        self.ensure_space(needed);
         let bx = self.opts.margin_left;
         let by = self.cursor_y - box_h;
         let bw = self.opts.content_width();
         self.current.push_str(&format!(
-            "q 0.9 g {bx:.2} {by:.2} {bw:.2} {box_h:.2} re f 0.6 G 1 w {bx:.2} {by:.2} {bw:.2} {box_h:.2} re S Q\n"
+            "q 0.9 g {bx} {by} {bw} {box_h} re f 0.6 G 1 w {bx} {by} {bw} {box_h} re S Q\n"
         ));
         let label = if !alt.is_empty() {
             alt.to_string()
@@ -886,27 +882,47 @@ impl Layout {
         } else {
             "[Figure]".to_string()
         };
-        let label_w = self.measure(&label, BODY_SIZE);
+        let label_w = measure_width(&label, BODY_SIZE, false);
         let lx = bx + (bw - label_w) / 2.0;
         let ly = by + box_h / 2.0 - BODY_SIZE / 2.0;
-        self.draw_single(&label, lx, ly, BODY_SIZE, false);
+        self.current.push_str(&format!(
+            "BT\n/F1 {BODY_SIZE:.1} Tf\n{lx} {ly} Td\n({}) Tj\nET\n",
+            pdf_str(&label)
+        ));
         self.cursor_y -= box_h;
+        if let Some(cap) = caption {
+            self.add_space(4.0);
+            let cap_lines = wrap_words(cap, BODY_SIZE - 1.0, false, bw);
+            for line in &cap_lines {
+                let lw = measure_width(line, BODY_SIZE - 1.0, false);
+                let lx = bx + (bw - lw) / 2.0;
+                self.current.push_str(&format!(
+                    "BT\n/F1 {:.1} Tf\n{lx} {} Td\n({}) Tj\nET\n",
+                    BODY_SIZE - 1.0,
+                    self.cursor_y,
+                    pdf_str(line)
+                ));
+                self.cursor_y -= BODY_LEAD;
+            }
+        }
+        self.add_space(PARA_SPACE);
     }
 
     fn draw_hline(&mut self, gray: f32, width: f32) {
         let x0 = self.opts.margin_left;
         let x1 = x0 + self.opts.content_width();
         self.current.push_str(&format!(
-            "q {gray} G {width} w {x0:.2} {y:.2} m {x1:.2} {y:.2} l S Q\n",
-            y = self.cursor_y
+            "q {gray} G {width} w {x0} {} m {x1} {} l S Q\n",
+            self.cursor_y, self.cursor_y
         ));
         self.cursor_y -= 1.0;
     }
 
-    fn finalize(mut self) -> (Vec<String>, usize, GlyphSet, Vec<ImageObj>, Vec<BlockCoord>) {
+    fn finalize(mut self) -> (Vec<String>, usize) {
+        // close the last page
         self.finish_page();
         let total = self.pages.len();
-        (self.pages, total, self.glyphs, self.images, self.coords)
+        (self.pages, total)
     }
 }
 
@@ -1004,124 +1020,61 @@ fn xmp_metadata(title: &str, xml_bytes: usize, compressed_bytes: usize) -> Strin
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-fn elem_id(e: &DocElem) -> Option<&str> {
-    match e {
-        DocElem::Heading { id, .. }
-        | DocElem::Paragraph { id, .. }
-        | DocElem::Table { id, .. }
-        | DocElem::CodeBlock { id, .. }
-        | DocElem::List { id, .. }
-        | DocElem::Citation { id, .. }
-        | DocElem::Note { id, .. }
-        | DocElem::Figure { id, .. } => id.as_deref(),
-        DocElem::DocTitle(_) => None,
-    }
-}
-
 pub fn build_rendered_pdf(
     xml: &str,
+    compressed: &[u8],
     title: &str,
     page_opts: &PageOptions,
-    font: &Font,
-    base_dir: Option<&Path>,
 ) -> Vec<u8> {
     let elems = parse_elements(xml);
-    let mut layout = Layout::new(page_opts.clone(), font.clone(), base_dir.map(Path::to_path_buf));
+    let mut layout = Layout::new(page_opts.clone());
 
-    for elem in &elems {
-        let id = elem_id(elem).map(str::to_string);
-        let top_before = layout.cursor_y;
-        let page_before = layout.page_num;
-
+    for elem in elems {
         match elem {
-            DocElem::DocTitle(t) => layout.render_doc_title(t),
-            DocElem::Heading { level, text, .. } => layout.render_heading(*level, text),
-            DocElem::Paragraph { text, .. } => layout.render_paragraph(text),
-            DocElem::Citation { text, .. } => layout.render_citation(text),
-            DocElem::Note { text, .. } => layout.render_note(text),
-            DocElem::CodeBlock { language, text, .. } => {
-                layout.render_code_block(text, language.as_deref())
+            DocElem::DocTitle(t) => layout.render_doc_title(&t),
+            DocElem::Heading { level, text } => layout.render_heading(level, &text),
+            DocElem::Paragraph(t) => layout.render_paragraph(&t),
+            DocElem::Citation(t) => layout.render_citation(&t),
+            DocElem::Note(t) => layout.render_note(&t),
+            DocElem::CodeBlock { language, text } => {
+                layout.render_code_block(&text, language.as_deref())
             }
-            DocElem::List { ordered, items, .. } => layout.render_list(*ordered, items),
-            DocElem::Table { caption, rows, .. } => layout.render_table(caption.as_deref(), rows),
-            DocElem::Figure { alt, src, caption, .. } => {
-                layout.render_figure(alt, src, caption.as_deref())
+            DocElem::List { ordered, items } => layout.render_list(ordered, &items),
+            DocElem::Table { caption, rows } => {
+                layout.render_table(caption.as_deref(), &rows)
             }
-        }
-
-        // Record the block's page + bbox. If a page break happened mid-block we
-        // attribute it to the page it ended up on (an approximation for blocks
-        // that span a boundary); the common single-page case is exact.
-        if let Some(id) = id {
-            let page_after = layout.page_num;
-            let (page, top) = if page_after == page_before {
-                (page_before, top_before)
-            } else {
-                (page_after, layout.opts.height - layout.opts.margin_top)
-            };
-            let x0 = layout.opts.margin_left;
-            let x1 = x0 + layout.opts.content_width();
-            let bottom = layout.cursor_y.max(layout.opts.margin_bottom);
-            layout.coords.push(BlockCoord {
-                id,
-                page,
-                bbox: (x0, bottom, x1, top),
-            });
+            DocElem::Figure { alt, src, caption } => {
+                layout.render_figure(&alt, &src, caption.as_deref())
+            }
         }
     }
 
-    let (page_streams, page_count, glyphs, images, coords) = layout.finalize();
-
-    // Rewrite the semantic XML with the real page/bbox coordinates, then embed
-    // that updated payload (compressed) so the machine layer matches the visuals.
-    let xml = apply_coordinates(xml, &coords);
-    let xml = xml.as_str();
-    let compressed = crate::pdf::brotli_compress(xml.as_bytes()).expect("brotli compress");
-    let compressed = compressed.as_slice();
+    let (page_streams, page_count) = layout.finalize();
 
     // Build PDF object tree
     let mut asm = Assembler::new();
+
+    // Reserve slots for objects whose IDs we need to know in advance
     let catalog_id = asm.reserve(); // 1
     let pages_id = asm.reserve(); // 2
 
-    // Embedded CID/Type0 font (referenced as /F1 by every page).
-    let used = glyphs.used();
-    let (ff_bytes, len1) = font::font_file2(font);
-    let ff_id = asm.add(stream_obj(
-        &ff_bytes,
-        &format!("<< /Length1 {len1} /Filter /FlateDecode >>"),
-    ));
-    let desc_id = asm.add(font::descriptor_dict(font, ff_id).into_bytes());
-    let cid_id = asm.add(font::cidfont_dict(font, desc_id, used).into_bytes());
-    let tu_id = asm.add(stream_obj(&font::tounicode_cmap(used), "<< >>"));
-    let type0_id = asm.add(font::type0_dict(font, cid_id, tu_id).into_bytes());
+    // Add font objects
+    let f1_id = asm.add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_vec());
+    let f2_id =
+        asm.add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>".to_vec());
+    let f3_id = asm.add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>".to_vec());
 
-    // Embed figure images as shared XObjects (one resource dict for all pages).
-    let mut xobject_entries = Vec::new();
-    for img in &images {
-        let dict = format!(
-            "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode >>",
-            img.enc.width, img.enc.height
-        );
-        let id = asm.add(stream_obj(&img.enc.data, &dict));
-        xobject_entries.push(format!("/{} {id} 0 R", img.name));
-    }
-    let resources = if xobject_entries.is_empty() {
-        format!("<< /Font << /F1 {type0_id} 0 R >> >>")
-    } else {
-        format!(
-            "<< /Font << /F1 {type0_id} 0 R >> /XObject << {} >> >>",
-            xobject_entries.join(" ")
-        )
-    };
+    let font_res = format!(
+        "<< /F1 {f1_id} 0 R /F2 {f2_id} 0 R /F3 {f3_id} 0 R >>"
+    );
 
-    // Page content streams and page objects
+    // Add page content streams and page objects
     let mut page_ids = Vec::new();
     for stream in &page_streams {
         let cs_id = asm.add(stream_obj(stream.as_bytes(), "<< >>"));
         let pg_id = asm.add(
             format!(
-                "<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 {} {}] /Resources {resources} /Contents {cs_id} 0 R >>",
+                "<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 {} {}] /Resources << /Font {font_res} >> /Contents {cs_id} 0 R >>",
                 page_opts.width, page_opts.height
             )
             .into_bytes(),
@@ -1131,7 +1084,10 @@ pub fn build_rendered_pdf(
 
     // XMP metadata
     let xmp = xmp_metadata(title, xml.len(), compressed.len());
-    let xmp_id = asm.add(stream_obj(xmp.as_bytes(), "<< /Type /Metadata /Subtype /XML >>"));
+    let xmp_id = asm.add(stream_obj(
+        xmp.as_bytes(),
+        "<< /Type /Metadata /Subtype /XML >>",
+    ));
 
     // Semantic layer
     let checksum = hex_sha256(compressed);
@@ -1159,7 +1115,10 @@ pub fn build_rendered_pdf(
         .join(" ");
     asm.set(
         pages_id,
-        format!("<< /Type /Pages /Kids [{kids}] /Count {page_count} >>").into_bytes(),
+        format!(
+            "<< /Type /Pages /Kids [{kids}] /Count {page_count} >>"
+        )
+        .into_bytes(),
     );
 
     // Fill in Catalog
@@ -1174,73 +1133,7 @@ pub fn build_rendered_pdf(
     asm.build(catalog_id, title)
 }
 
-// ── Coordinate write-back ──────────────────────────────────────────────────────
-
-/// Rewrite the semantic XML, replacing each matched element's `page` and `bbox`
-/// attributes with the real laid-out coordinates. Elements without a recorded
-/// coordinate are passed through unchanged.
-fn apply_coordinates(xml: &str, coords: &[BlockCoord]) -> String {
-    use quick_xml::events::BytesStart;
-    use std::collections::HashMap;
-    use std::io::Cursor;
-
-    let map: HashMap<&str, &BlockCoord> = coords.iter().map(|c| (c.id.as_str(), c)).collect();
-
-    let rewrite = |e: &BytesStart| -> Option<BytesStart<'static>> {
-        let id = e
-            .attributes()
-            .flatten()
-            .find(|a| a.key.as_ref() == b"id")
-            .map(|a| String::from_utf8_lossy(a.value.as_ref()).into_owned())?;
-        let c = map.get(id.as_str())?;
-        let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
-        let mut nb = BytesStart::new(name);
-        for attr in e.attributes().flatten() {
-            let key = attr.key.as_ref();
-            if key == b"page" || key == b"bbox" {
-                continue; // replaced below
-            }
-            let k = String::from_utf8_lossy(key).into_owned();
-            let v = String::from_utf8_lossy(attr.value.as_ref()).into_owned();
-            nb.push_attribute((k.as_str(), v.as_str()));
-        }
-        let (x0, y0, x1, y1) = c.bbox;
-        nb.push_attribute(("page", c.page.to_string().as_str()));
-        nb.push_attribute(("bbox", format!("{x0:.1},{y0:.1},{x1:.1},{y1:.1}").as_str()));
-        Some(nb)
-    };
-
-    let mut reader = Reader::from_str(xml);
-    let mut writer = Writer::new(Cursor::new(Vec::new()));
-    loop {
-        match reader.read_event() {
-            Ok(Event::Start(e)) => {
-                let ev = rewrite(&e);
-                match ev {
-                    Some(nb) => writer.write_event(Event::Start(nb)),
-                    None => writer.write_event(Event::Start(e)),
-                }
-                .ok();
-            }
-            Ok(Event::Empty(e)) => {
-                let ev = rewrite(&e);
-                match ev {
-                    Some(nb) => writer.write_event(Event::Empty(nb)),
-                    None => writer.write_event(Event::Empty(e)),
-                }
-                .ok();
-            }
-            Ok(Event::Eof) => break,
-            Ok(ev) => {
-                writer.write_event(ev).ok();
-            }
-            Err(_) => break,
-        }
-    }
-    String::from_utf8(writer.into_inner().into_inner()).unwrap_or_else(|_| xml.to_string())
-}
-
-// ── PDF string encoding (used only for /Info and dict literals) ────────────────
+// ── PDF string encoding ───────────────────────────────────────────────────────
 
 fn pdf_str(input: &str) -> String {
     let mut out = String::new();
@@ -1250,6 +1143,7 @@ fn pdf_str(input: &str) -> String {
             '(' => out.push_str("\\("),
             ')' => out.push_str("\\)"),
             '\r' | '\n' => out.push(' '),
+            // Keep printable ASCII, replace others with '?'
             c if (c as u32) < 32 => out.push(' '),
             c if (c as u32) > 126 => out.push('?'),
             c => out.push(c),

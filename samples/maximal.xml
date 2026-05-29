@@ -21,7 +21,7 @@ Here’s a significantly more complex, multi-factored XML document designed for 
 <?xml version="1.0" encoding="UTF-8"?>
 
 <document
-    version="1.0"
+    version="2.5"
     id="enterprise-report-2026"
     lang="en"
     profile="AI-PDF-Extended">
