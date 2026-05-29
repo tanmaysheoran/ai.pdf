@@ -224,7 +224,8 @@ fn attach_semantic_layer(doc: &mut Document, xml: &str) -> Result<()> {
     let ef = Stream::new(
         dictionary! {
             "Type" => Object::Name(b"EmbeddedFile".to_vec()),
-            "Subtype" => Object::Name(b"application#aipdf+xml+br".to_vec()),
+            // Unescaped name bytes; lopdf escapes the '/' to #2F on write.
+            "Subtype" => Object::Name(b"application/aipdf+xml+br".to_vec()),
             "Params" => dictionary! {
                 "Size" => Object::Integer(xml.len() as i64),
                 "CheckSum" => Object::String(checksum, StringFormat::Hexadecimal),

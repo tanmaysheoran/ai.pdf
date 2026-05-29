@@ -40,7 +40,8 @@ fn load_image(base_dir: Option<&Path>, src: &str) -> Option<EncodedImage> {
 }
 
 const SEMANTIC_FILENAME: &str = "aipdf-semantic.xml.br";
-const SEMANTIC_SUBTYPE: &str = "/application#aipdf+xml+br";
+// Conformant PDF name for MIME `application/aipdf+xml+br` (`/` escaped as `#2F`).
+const SEMANTIC_SUBTYPE: &str = "/application#2Faipdf+xml+br";
 
 // ── Page geometry ─────────────────────────────────────────────────────────────
 

@@ -39,11 +39,20 @@ Recommended MIME marker:
 application/aipdf+xml+br
 ```
 
-PDF name encoding uses `#` escapes:
+PDF name encoding uses `#HH` hex escapes for characters that are not permitted
+bare in a name. The `/` of the MIME type is escaped as `#2F`, so the embedded
+file's subtype is the conformant name:
 
 ```pdf
-/Subtype /application#aipdf+xml+br
+/Subtype /application#2Faipdf+xml+br
 ```
+
+which decodes to the MIME type `application/aipdf+xml+br`. (Earlier drafts wrote
+`/application#aipdf+xml+br`; that `#a` is not a valid escape and causes
+conformant readers to discard the embedded file, so it must not be used.)
+Because subtype names can be re-encoded by PDF tools, the **primary** detection
+key is the embedded filename `aipdf-semantic.xml.br` reached via the Filespec
+`/EF` reference; the subtype is a secondary hint.
 
 ## PDF Object Map
 

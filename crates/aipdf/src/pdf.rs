@@ -10,7 +10,11 @@ use sha2::{Digest, Sha256};
 use std::io::Read;
 
 const SEMANTIC_FILENAME: &str = "aipdf-semantic.xml.br";
-const SEMANTIC_SUBTYPE: &str = "/application#aipdf+xml+br";
+// PDF name for MIME `application/aipdf+xml+br`. The `/` is escaped as `#2F` so
+// this is a *conformant* PDF name — an earlier form used a bare `#aipdf`, which
+// is an invalid escape that made conformant readers (and lopdf) drop the
+// embedded-file object entirely.
+const SEMANTIC_SUBTYPE: &str = "/application#2Faipdf+xml+br";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RenderMode {
@@ -147,10 +151,46 @@ fn find_semantic_stream(bytes: &[u8]) -> Option<&[u8]> {
 
 fn find_semantic_stream_lopdf(bytes: &[u8]) -> Option<Vec<u8>> {
     let doc = lopdf::Document::load_mem(bytes).ok()?;
+
+    // Primary: locate the Filespec for `aipdf-semantic.xml.br` and follow its
+    // /EF /F (or /UF) reference to the EmbeddedFile stream. This is robust
+    // because it relies on the embedded filename (a plain PDF string) rather
+    // than the `/Subtype` name — whose `#` is a non-conformant escape that PDF
+    // tools (and lopdf) mangle on re-serialisation.
+    for (_id, obj) in doc.objects.iter() {
+        let lopdf::Object::Dictionary(d) = obj else {
+            continue;
+        };
+        let filename = d
+            .get(b"UF")
+            .or_else(|_| d.get(b"F"))
+            .ok()
+            .and_then(|o| o.as_str().ok());
+        let is_semantic_file = filename.map_or(false, |n| {
+            n.windows(SEMANTIC_FILENAME.len()).any(|w| w == SEMANTIC_FILENAME.as_bytes())
+        });
+        if !is_semantic_file {
+            continue;
+        }
+        if let Ok(ef) = d.get(b"EF").and_then(|o| o.as_dict()) {
+            let target = ef
+                .get(b"F")
+                .or_else(|_| ef.get(b"UF"))
+                .ok()
+                .and_then(|o| o.as_reference().ok());
+            if let Some(r) = target {
+                if let Ok(lopdf::Object::Stream(s)) = doc.get_object(r) {
+                    return Some(s.content.clone());
+                }
+            }
+        }
+    }
+
+    // Fallback: any EmbeddedFile stream whose parsed /Subtype mentions "aipdf".
     for (_id, obj) in doc.objects.iter() {
         if let lopdf::Object::Stream(s) = obj {
-            let is_ef =
-                s.dict.get(b"Type").ok().and_then(|o| o.as_name().ok()) == Some(b"EmbeddedFile".as_ref());
+            let is_ef = s.dict.get(b"Type").ok().and_then(|o| o.as_name().ok())
+                == Some(b"EmbeddedFile".as_ref());
             let subtype_is_aipdf = s
                 .dict
                 .get(b"Subtype")
