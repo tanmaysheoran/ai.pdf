@@ -17,7 +17,9 @@ and point your MCP client at that command.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 from .core import AIPDF, AIPDFError, get_reading_order
@@ -56,6 +58,34 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {"path": {"type": "string", "description": "Path to the .ai.pdf file."}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "aipdf_convert",
+        "description": (
+            "Convert a plain PDF to an .ai.pdf by attaching a semantic layer via text extraction "
+            "(with optional OCR for scanned pages). Requires the aipdf CLI to be installed."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path to the input PDF file."},
+                "output": {
+                    "type": "string",
+                    "description": "Output path for the .ai.pdf file. Defaults to the input path with .ai.pdf extension.",
+                },
+                "ocr": {
+                    "type": "string",
+                    "enum": ["auto", "never", "force"],
+                    "default": "auto",
+                    "description": "OCR mode: auto (OCR low-text pages), never, or force.",
+                },
+                "lang": {
+                    "type": "string",
+                    "description": "Tesseract language code(s) for OCR, e.g. 'eng' or 'eng+deu'. Default: eng.",
+                },
+            },
             "required": ["path"],
         },
     },
@@ -100,6 +130,27 @@ def call_tool(name: str, args: dict[str, Any]) -> str:
             [{"kind": b.kind, "id": b.id, "page": b.page, "bbox": b.bbox, "text": b.text} for b in blocks],
             indent=2,
         )
+    if name == "aipdf_convert":
+        input_path = args["path"]
+        if not Path(input_path).exists():
+            raise AIPDFError(f"file not found: {input_path}")
+        output_path = args.get("output") or str(Path(input_path).with_suffix(".ai.pdf"))
+        cmd = ["aipdf", "ingest", input_path, "-o", output_path]
+        ocr = args.get("ocr", "auto")
+        if ocr:
+            cmd += ["--ocr", ocr]
+        lang = args.get("lang")
+        if lang:
+            cmd += ["--lang", lang]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        except FileNotFoundError:
+            raise AIPDFError(
+                "aipdf CLI not found; install it from https://github.com/aiPDF/aipdf or add it to PATH"
+            )
+        if result.returncode != 0:
+            raise AIPDFError(result.stderr.strip() or f"aipdf ingest failed (exit {result.returncode})")
+        return json.dumps({"output": output_path, "message": result.stdout.strip() or "conversion successful"})
     raise AIPDFError(f"unknown tool: {name}")
 
 
