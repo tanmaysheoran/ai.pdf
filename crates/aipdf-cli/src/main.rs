@@ -1,6 +1,6 @@
 use aipdf::{
     build_aipdf, extract_semantic_xml, inspect_pdf, semantic_xml_from_source, validate_xml,
-    xml_to_markdown, xml_to_markdown_ast_json, xml_to_onto, BuildOptions, PageOptions,
+    xml_to_markdown, xml_to_markdown_ast_json, xml_to_onto, BuildOptions, Font, PageOptions,
     RenderMode, SourceKind,
 };
 use clap::{Parser, Subcommand, ValueEnum};
@@ -26,6 +26,10 @@ enum Command {
         render: Render,
         #[arg(long, value_enum, default_value_t = PageSize::Letter)]
         page_size: PageSize,
+        /// Path to a TrueType font to embed in the visible layer (e.g. a Noto
+        /// CJK face). Defaults to the bundled DejaVu Sans.
+        #[arg(long)]
+        font: Option<PathBuf>,
     },
     Inspect {
         file: PathBuf,
@@ -77,6 +81,7 @@ fn main() -> aipdf::Result<()> {
             title,
             render,
             page_size,
+            font,
         } => {
             let source = fs::read_to_string(&input)?;
             let kind = SourceKind::from_path(&input)?;
@@ -89,6 +94,10 @@ fn main() -> aipdf::Result<()> {
                 PageSize::Letter => PageOptions::letter(),
                 PageSize::A4 => PageOptions::a4(),
             };
+            let font = match font {
+                Some(path) => Font::from_path(&path)?,
+                None => Font::default_font(),
+            };
             let bytes = build_aipdf(
                 &xml,
                 &BuildOptions {
@@ -96,6 +105,7 @@ fn main() -> aipdf::Result<()> {
                     visible_text: None,
                     render: render_mode,
                     page,
+                    font,
                 },
             )?;
             let output = output.unwrap_or_else(|| {

@@ -1,4 +1,5 @@
 use crate::{
+    font::{self, Font, GlyphSet},
     render::{build_rendered_pdf, PageOptions},
     security::sanitize_xml,
     xml::validate_xml,
@@ -18,12 +19,14 @@ pub enum RenderMode {
     Full,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BuildOptions {
     pub title: String,
     pub visible_text: Option<String>,
     pub render: RenderMode,
     pub page: PageOptions,
+    /// Embedded TrueType font for the visible layer (defaults to DejaVu Sans).
+    pub font: Font,
 }
 
 impl Default for BuildOptions {
@@ -33,6 +36,7 @@ impl Default for BuildOptions {
             visible_text: None,
             render: RenderMode::Minimal,
             page: PageOptions::default(),
+            font: Font::default_font(),
         }
     }
 }
@@ -50,13 +54,25 @@ pub fn build_aipdf(xml: &str, options: &BuildOptions) -> Result<Vec<u8>> {
     validate_xml(&xml)?;
     let compressed = brotli_compress(xml.as_bytes())?;
     match options.render {
-        RenderMode::Full => Ok(build_rendered_pdf(&xml, &compressed, &options.title, &options.page)),
+        RenderMode::Full => Ok(build_rendered_pdf(
+            &xml,
+            &compressed,
+            &options.title,
+            &options.page,
+            &options.font,
+        )),
         RenderMode::Minimal => {
             let visible_text = options
                 .visible_text
                 .clone()
                 .unwrap_or_else(|| visible_text_from_xml(&xml));
-            Ok(write_pdf(&options.title, &visible_text, &xml, &compressed))
+            Ok(write_pdf(
+                &options.title,
+                &visible_text,
+                &xml,
+                &compressed,
+                &options.font,
+            ))
         }
     }
 }
@@ -127,8 +143,17 @@ fn visible_text_from_xml(xml: &str) -> String {
         .unwrap_or_else(|_| "AIPDF document".to_string())
 }
 
-fn write_pdf(title: &str, visible_text: &str, xml: &str, compressed: &[u8]) -> Vec<u8> {
-    let content = visible_content_stream(visible_text);
+fn write_pdf(title: &str, visible_text: &str, xml: &str, compressed: &[u8], font: &Font) -> Vec<u8> {
+    // Encode the visible text as embedded-font glyph IDs so non-ASCII survives.
+    let mut glyphs = GlyphSet::new();
+    let mut content = String::from("BT\n/F1 12 Tf\n72 740 Td\n14 TL\n");
+    for line in visible_text.lines().take(45) {
+        let h = glyphs.encode_hex(font, line);
+        content.push_str(&format!("<{h}> Tj\nT*\n"));
+    }
+    content.push_str("ET\n");
+    let used = glyphs.used();
+
     let xmp = xmp_metadata(title, xml.len(), compressed.len());
     let checksum = hex_sha256(compressed);
     let escaped_title = pdf_string(title);
@@ -136,24 +161,30 @@ fn write_pdf(title: &str, visible_text: &str, xml: &str, compressed: &[u8]) -> V
         "AIPDF semantic layer present: extract aipdf-semantic.xml.br, Brotli-decompress, parse XML.",
     );
 
+    // Fixed object layout (single page). Font objects 9–13 are wired into the
+    // page's /Resources via the Type0 font (object 13).
+    let (ff_bytes, len1) = font::font_file2(font);
     let objects: Vec<Vec<u8>> = vec![
-        format!(
-            "<< /Type /Catalog /Pages 2 0 R /Metadata 6 0 R /Names << /EmbeddedFiles 7 0 R >> /AF [8 0 R] >>"
-        )
-        .into_bytes(),
+        // 1 Catalog
+        b"<< /Type /Catalog /Pages 2 0 R /Metadata 6 0 R /Names << /EmbeddedFiles 7 0 R >> /AF [8 0 R] >>".to_vec(),
+        // 2 Pages
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_vec(),
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_vec(),
+        // 3 Page (Type0 font is object 14)
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 14 0 R >> >> /Contents 5 0 R >>".to_vec(),
+        // 4 (unused legacy font slot kept to preserve numbering) -> empty dict
+        b"<< >>".to_vec(),
+        // 5 visible content stream
         stream_object(content.as_bytes(), "<< >>"),
-        stream_object(
-            xmp.as_bytes(),
-            "<< /Type /Metadata /Subtype /XML >>",
-        ),
+        // 6 XMP metadata
+        stream_object(xmp.as_bytes(), "<< /Type /Metadata /Subtype /XML >>"),
+        // 7 EmbeddedFiles names
         b"<< /Names [(aipdf-semantic.xml.br) 8 0 R] >>".to_vec(),
+        // 8 Filespec
         format!(
             "<< /Type /Filespec /F ({SEMANTIC_FILENAME}) /UF ({SEMANTIC_FILENAME}) /Desc ({escaped_title} semantic XML) /AFRelationship /Data /EF << /F 9 0 R /UF 9 0 R >> >>"
         )
         .into_bytes(),
+        // 9 EmbeddedFile (Brotli semantic XML)
         stream_object(
             compressed,
             &format!(
@@ -161,6 +192,16 @@ fn write_pdf(title: &str, visible_text: &str, xml: &str, compressed: &[u8]) -> V
                 xml.len(), checksum
             ),
         ),
+        // 10 FontFile2
+        stream_object(&ff_bytes, &format!("<< /Length1 {len1} /Filter /FlateDecode >>")),
+        // 11 FontDescriptor (-> FontFile2 obj 10)
+        font::descriptor_dict(font, 10).into_bytes(),
+        // 12 CIDFontType2 (-> FontDescriptor obj 11)
+        font::cidfont_dict(font, 11, used).into_bytes(),
+        // 13 ToUnicode CMap
+        stream_object(&font::tounicode_cmap(used), "<< >>"),
+        // 14 Type0 (-> CIDFont obj 12, ToUnicode obj 13)
+        font::type0_dict(font, 12, 13).into_bytes(),
     ];
 
     let mut pdf = Vec::new();
@@ -195,15 +236,6 @@ fn stream_object(bytes: &[u8], dict: &str) -> Vec<u8> {
     out.extend_from_slice(format!("{dict} /Length {} >>\nstream\n", bytes.len()).as_bytes());
     out.extend_from_slice(bytes);
     out.extend_from_slice(b"\nendstream");
-    out
-}
-
-fn visible_content_stream(text: &str) -> String {
-    let mut out = String::from("BT\n/F1 12 Tf\n72 740 Td\n14 TL\n");
-    for line in text.lines().take(45) {
-        out.push_str(&format!("({}) Tj\nT*\n", pdf_string(line)));
-    }
-    out.push_str("ET\n");
     out
 }
 

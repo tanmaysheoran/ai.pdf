@@ -1,3 +1,4 @@
+pub(crate) mod font;
 mod markdown;
 mod onto;
 mod pdf;
@@ -6,6 +7,7 @@ mod security;
 mod source;
 mod xml;
 
+pub use font::Font;
 pub use markdown::{xml_to_markdown, xml_to_markdown_ast_json};
 pub use onto::xml_to_onto;
 pub use pdf::{
