@@ -1,5 +1,7 @@
 # ai.pdf
 
+[![Release](https://github.com/tanmaysheoran/ai.pdf/actions/workflows/release.yml/badge.svg)](https://github.com/tanmaysheoran/ai.pdf/actions/workflows/release.yml)
+
 **An AI-native PDF extension format.**
 
 An `.ai.pdf` file is a fully valid PDF — it renders, prints, and opens in any PDF reader unchanged. It also embeds a Brotli-compressed semantic XML layer as an associated file so AI-aware parsers can read structure directly, without OCR or heuristics.
