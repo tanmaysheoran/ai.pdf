@@ -1,6 +1,9 @@
 <div align="center">
 
-# ai.pdf
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+  <img src="assets/logo-light.svg" alt="ai.pdf" width="300">
+</picture>
 
 [![Release](https://github.com/tanmaysheoran/ai.pdf/actions/workflows/release.yml/badge.svg)](https://github.com/tanmaysheoran/ai.pdf/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)

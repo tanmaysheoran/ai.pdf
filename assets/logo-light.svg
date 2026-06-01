@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="328" height="72" viewBox="0 0 328 72" fill="none" role="img" aria-label="ai.pdf — AI-native PDF">
+  <g transform="translate(4,4)">
+    <rect x="22" y="8" width="34" height="42" rx="7.5" stroke="#2f7ed6" stroke-width="3"></rect>
+    <rect x="8" y="14" width="34" height="42" rx="7.5" fill="#fafaf8" stroke="#16161a" stroke-width="3.2"></rect>
+    <line x1="15" y1="26" x2="35" y2="26" stroke="#16161a" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="15" y1="33" x2="35" y2="33" stroke="#16161a" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="15" y1="40" x2="28" y2="40" stroke="#16161a" stroke-width="3" stroke-linecap="round"></line>
+  </g>
+  <text x="84" y="50" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="46" letter-spacing="-1.4">
+    <tspan font-weight="800" fill="#16161a">ai</tspan><tspan font-weight="800" fill="#2f7ed6">.</tspan><tspan font-weight="500" fill="#16161a" opacity="0.42">pdf</tspan>
+  </text>
+</svg>
