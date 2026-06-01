@@ -154,14 +154,17 @@ fn decode_xobject(xo: &RawXObject) -> Option<ImagePayload> {
             if xo.bits != 8 {
                 return None;
             }
-            // We don't undo PNG/TIFF predictors; refuse rather than corrupt.
-            if matches!(xo.predictor, Some(p) if p >= 2) {
-                return None;
-            }
             let mut raw = Vec::new();
             ZlibDecoder::new(xo.content.as_slice())
                 .read_to_end(&mut raw)
                 .ok()?;
+            // Undo TIFF (predictor 2) or PNG (predictors 10–15) row filtering
+            // before interpreting the decompressed bytes as pixel data.
+            if let Some(p) = xo.predictor {
+                if p >= 2 && !undo_predictor(&mut raw, p, xo.width, xo.color, xo.bits) {
+                    return None;
+                }
+            }
             let px = xo.width as usize * xo.height as usize;
             match xo.color {
                 ColorKind::Rgb => {
@@ -179,9 +182,125 @@ fn decode_xobject(xo: &RawXObject) -> Option<ImagePayload> {
                     raw.truncate(px);
                     Some(ImagePayload::Gray8(raw))
                 }
+                ColorKind::Indexed => {
+                    // Each byte is a palette index; expand to RGB using the
+                    // palette stored alongside this XObject.
+                    let palette = xo.palette.as_ref()?;
+                    let n_entries = palette.len() / 3;
+                    if n_entries == 0 || raw.len() < px {
+                        return None;
+                    }
+                    let mut rgb = Vec::with_capacity(px * 3);
+                    for &idx in &raw[..px] {
+                        let i = (idx as usize).min(n_entries - 1);
+                        rgb.extend_from_slice(&palette[i * 3..i * 3 + 3]);
+                    }
+                    Some(ImagePayload::Rgb8(rgb))
+                }
                 ColorKind::Other => None,
             }
         }
+    }
+}
+
+/// Un-filter a FlateDecode image stream in-place after Zlib decompression.
+///
+/// Predictor 2 — TIFF horizontal differencing: rows are flat `width × bpp`
+/// byte runs; un-diff each row left-to-right, no per-row header byte.
+///
+/// Predictors 10–15 — PNG row-based filtering: each row starts with a filter
+/// type byte (0 None / 1 Sub / 2 Up / 3 Average / 4 Paeth) followed by
+/// `width × bpp` sample bytes. Reconstruct using the prior row.
+///
+/// Returns `false` when dimensions are inconsistent with the data length or the
+/// colour kind is unsupported; `raw` is then left in an unspecified state.
+fn undo_predictor(raw: &mut Vec<u8>, predictor: i64, width: u32, color: ColorKind, bits: u32) -> bool {
+    if bits != 8 {
+        return false;
+    }
+    let bpp: usize = match color {
+        ColorKind::Rgb => 3,
+        ColorKind::Gray | ColorKind::Indexed => 1, // index bytes are 1 byte per pixel
+        ColorKind::Other => return false,
+    };
+    match predictor {
+        2 => {
+            let row_len = width as usize * bpp;
+            if row_len == 0 || raw.len() % row_len != 0 {
+                return false;
+            }
+            for row in raw.chunks_mut(row_len) {
+                for i in bpp..row.len() {
+                    row[i] = row[i].wrapping_add(row[i - bpp]);
+                }
+            }
+            true
+        }
+        10..=15 => {
+            let row_len = width as usize * bpp;
+            let stride = row_len + 1; // +1 for the per-row filter-type byte
+            if stride == 1 || raw.len() % stride != 0 {
+                return false;
+            }
+            let nrows = raw.len() / stride;
+            let mut out = vec![0u8; row_len * nrows];
+            let mut prev = vec![0u8; row_len];
+            for y in 0..nrows {
+                let base = y * stride;
+                let filter = raw[base];
+                let src = &raw[base + 1..base + stride];
+                let dst = &mut out[y * row_len..(y + 1) * row_len];
+                apply_png_row(filter, src, &prev, dst, bpp);
+                prev.copy_from_slice(dst);
+            }
+            *raw = out;
+            true
+        }
+        _ => false,
+    }
+}
+
+#[inline]
+fn apply_png_row(filter: u8, src: &[u8], prev: &[u8], dst: &mut [u8], bpp: usize) {
+    let n = dst.len();
+    match filter {
+        0 => dst.copy_from_slice(src),
+        1 => {
+            for i in 0..n {
+                let a = if i >= bpp { dst[i - bpp] } else { 0 };
+                dst[i] = src[i].wrapping_add(a);
+            }
+        }
+        2 => {
+            for i in 0..n {
+                dst[i] = src[i].wrapping_add(prev[i]);
+            }
+        }
+        3 => {
+            for i in 0..n {
+                let a = if i >= bpp { dst[i - bpp] as u16 } else { 0 };
+                let b = prev[i] as u16;
+                dst[i] = src[i].wrapping_add(((a + b) >> 1) as u8);
+            }
+        }
+        4 => {
+            for i in 0..n {
+                let a = if i >= bpp { dst[i - bpp] as i32 } else { 0 };
+                let b = prev[i] as i32;
+                let c = if i >= bpp { prev[i - bpp] as i32 } else { 0 };
+                let p = a + b - c;
+                let pr = if (p - a).abs() <= (p - b).abs() && (p - a).abs() <= (p - c).abs() {
+                    a
+                } else if (p - b).abs() <= (p - c).abs() {
+                    b
+                } else {
+                    c
+                };
+                dst[i] = src[i].wrapping_add(pr as u8);
+            }
+        }
+        // Unknown filter type: treat as None rather than emitting corrupt pixels.
+        _ => dst.copy_from_slice(src),
     }
 }
 

@@ -1,6 +1,9 @@
 //! Collect Image XObjects from a parsed PDF and classify their codec,
 //! colorspace, and predictor so [`super::images`] can decode them.
 
+use flate2::read::ZlibDecoder;
+use std::io::Read;
+
 /// The image codec on an Image XObject — the only two we extract.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum ImgFilter {
@@ -13,6 +16,9 @@ pub(super) enum ImgFilter {
 pub(super) enum ColorKind {
     Rgb,
     Gray,
+    /// Paletted: pixel bytes are indices into `RawXObject::palette` (always
+    /// expanded to RGB triples before the caller sees the pixels).
+    Indexed,
     Other,
 }
 
@@ -27,6 +33,9 @@ pub(super) struct RawXObject {
     pub(super) bits: u32,
     pub(super) predictor: Option<i64>,
     pub(super) content: Vec<u8>,
+    /// RGB palette for `/Indexed` images: 3 bytes per entry, `(hival+1)`
+    /// entries.  `None` for all non-indexed colorspaces.
+    pub(super) palette: Option<Vec<u8>>,
 }
 
 pub(super) fn collect_image_xobjects(doc: &lopdf::Document) -> Vec<RawXObject> {
@@ -92,13 +101,14 @@ pub(super) fn collect_image_xobjects(doc: &lopdf::Document) -> Vec<RawXObject> {
                 .get(b"BitsPerComponent")
                 .and_then(|o| o.as_i64())
                 .unwrap_or(8);
-            let color = s
+            let cs_obj = s
                 .dict
                 .get(b"ColorSpace")
                 .ok()
-                .or_else(|| s.dict.get(b"CS").ok())
-                .map(|cs| color_kind(doc, cs))
-                .unwrap_or(ColorKind::Other);
+                .or_else(|| s.dict.get(b"CS").ok());
+            let (color, palette) = cs_obj
+                .map(|cs| classify_colorspace(doc, cs))
+                .unwrap_or((ColorKind::Other, None));
             let predictor = predictor_of(
                 s.dict
                     .get(b"DecodeParms")
@@ -115,6 +125,7 @@ pub(super) fn collect_image_xobjects(doc: &lopdf::Document) -> Vec<RawXObject> {
                     bits: bits as u32,
                     predictor,
                     content: s.content.clone(),
+                    palette,
                 },
             );
         }
@@ -149,40 +160,121 @@ fn filter_kind(obj: &lopdf::Object) -> Option<ImgFilter> {
     }
 }
 
-/// Classify a `/ColorSpace` into RGB / Gray / Other, resolving references and
-/// `[/ICCBased <stream>]` (by the stream's `/N` component count).
-fn color_kind(doc: &lopdf::Document, cs: &lopdf::Object) -> ColorKind {
+/// Classify a `/ColorSpace` and optionally extract an RGB palette for
+/// `/Indexed` images.  Returns `(kind, palette)` where `palette` is
+/// `Some(rgb_bytes)` only when `kind == ColorKind::Indexed`.
+fn classify_colorspace(doc: &lopdf::Document, cs: &lopdf::Object) -> (ColorKind, Option<Vec<u8>>) {
     use lopdf::Object;
     let resolved = match cs {
         Object::Reference(r) => match doc.get_object(*r) {
             Ok(o) => o,
-            Err(_) => return ColorKind::Other,
+            Err(_) => return (ColorKind::Other, None),
         },
         other => other,
     };
     match resolved {
-        Object::Name(n) => match n.as_slice() {
-            b"DeviceRGB" | b"CalRGB" | b"RGB" => ColorKind::Rgb,
-            b"DeviceGray" | b"CalGray" | b"G" => ColorKind::Gray,
-            _ => ColorKind::Other,
-        },
+        Object::Name(n) => {
+            let kind = match n.as_slice() {
+                b"DeviceRGB" | b"CalRGB" | b"RGB" => ColorKind::Rgb,
+                b"DeviceGray" | b"CalGray" | b"G" => ColorKind::Gray,
+                _ => ColorKind::Other,
+            };
+            (kind, None)
+        }
         Object::Array(a) => {
-            if let Some(Object::Name(n)) = a.first() {
-                if n.as_slice() == b"ICCBased" {
-                    if let Some(r) = a.get(1).and_then(|o| o.as_reference().ok()) {
-                        if let Ok(Object::Stream(s)) = doc.get_object(r) {
-                            return match s.dict.get(b"N").and_then(|o| o.as_i64()) {
-                                Ok(3) => ColorKind::Rgb,
-                                Ok(1) => ColorKind::Gray,
-                                _ => ColorKind::Other,
-                            };
-                        }
+            let tag = match a.first() {
+                Some(Object::Name(n)) => n.as_slice(),
+                _ => return (ColorKind::Other, None),
+            };
+            if tag == b"ICCBased" {
+                if let Some(r) = a.get(1).and_then(|o| o.as_reference().ok()) {
+                    if let Ok(Object::Stream(s)) = doc.get_object(r) {
+                        let kind = match s.dict.get(b"N").and_then(|o| o.as_i64()) {
+                            Ok(3) => ColorKind::Rgb,
+                            Ok(1) => ColorKind::Gray,
+                            _ => ColorKind::Other,
+                        };
+                        return (kind, None);
+                    }
+                }
+                return (ColorKind::Other, None);
+            }
+            if tag == b"Indexed" && a.len() >= 4 {
+                // [/Indexed base_cs hival lookup]
+                // hival is the highest valid index (palette has hival+1 entries).
+                if let Ok(hival) = a[2].as_i64() {
+                    let n_entries = (hival as usize).saturating_add(1);
+                    if let Some(palette) = extract_rgb_palette(doc, &a[3], n_entries) {
+                        return (ColorKind::Indexed, Some(palette));
                     }
                 }
             }
-            ColorKind::Other
+            (ColorKind::Other, None)
         }
-        _ => ColorKind::Other,
+        _ => (ColorKind::Other, None),
+    }
+}
+
+/// Load the raw palette bytes for a `/Indexed` colorspace lookup table (which
+/// may be an inline PDF string or an indirect stream reference), then expand
+/// them to a flat RGB buffer (`n_entries × 3` bytes).
+///
+/// The base colorspace is inferred from `raw.len() / n_entries`:
+/// - 3 bytes/entry → RGB, kept as-is.
+/// - 1 byte/entry → Gray, expanded to three equal channels.
+/// - anything else (e.g. CMYK) → `None` (unsupported).
+fn extract_rgb_palette(
+    doc: &lopdf::Document,
+    lookup: &lopdf::Object,
+    n_entries: usize,
+) -> Option<Vec<u8>> {
+    use lopdf::Object;
+    let raw: Vec<u8> = match lookup {
+        Object::String(bytes, _) => bytes.clone(),
+        Object::Reference(r) => match doc.get_object(*r) {
+            Ok(Object::Stream(s)) => decode_stream(&s),
+            Ok(Object::String(bytes, _)) => bytes.clone(),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    if raw.len() < n_entries {
+        return None;
+    }
+    let bpp = raw.len() / n_entries;
+    let palette = match bpp {
+        3 => raw[..n_entries * 3].to_vec(),
+        1 => raw[..n_entries]
+            .iter()
+            .flat_map(|&g| [g, g, g])
+            .collect(),
+        _ => return None,
+    };
+    Some(palette)
+}
+
+/// Return the decoded content of a stream, decompressing FlateDecode if needed.
+/// Falls back to raw bytes if decompression fails or the filter is unknown.
+fn decode_stream(s: &lopdf::Stream) -> Vec<u8> {
+    let filter = s
+        .dict
+        .get(b"Filter")
+        .ok()
+        .or_else(|| s.dict.get(b"F").ok())
+        .and_then(|o| o.as_name().ok());
+    match filter {
+        Some(f) if f == b"FlateDecode" || f == b"Fl" => {
+            let mut decoded = Vec::new();
+            if ZlibDecoder::new(s.content.as_slice())
+                .read_to_end(&mut decoded)
+                .is_ok()
+                && !decoded.is_empty()
+            {
+                return decoded;
+            }
+            s.content.clone()
+        }
+        _ => s.content.clone(),
     }
 }
 
