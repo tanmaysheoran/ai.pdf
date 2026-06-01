@@ -59,7 +59,7 @@ pub(crate) fn extract_xml_payload(input: &str) -> String {
         input.trim().to_string()
     };
     // Strip xml-stylesheet processing instructions: they are browser-preview hints only
-    // and must not be embedded in the .aipdf semantic payload (validate_xml rejects PIs).
+    // and must not be embedded in the .ai.pdf semantic payload (validate_xml rejects PIs).
     raw.lines()
         .filter(|l| !l.trim().starts_with("<?xml-stylesheet"))
         .collect::<Vec<_>>()

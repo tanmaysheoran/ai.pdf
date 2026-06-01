@@ -11,7 +11,7 @@ import { execFileSync } from "node:child_process";
 import { AIPDFError, BuildOptions, IngestOptions, ExportFormat, ExportResult } from "./types.js";
 
 export function aipdfBinary(): string {
-  return process.env.AIPDF_BIN ?? "aipdf";
+  return process.env.ai.pdf_BIN ?? "aipdf";
 }
 
 export function runCli(args: string[]): string {

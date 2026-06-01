@@ -3,7 +3,7 @@ name = "aipdf"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Core library for minimal semantic .aipdf files"
+description = "Core library for minimal semantic .ai.pdf files"
 
 [dependencies]
 brotli = "7"

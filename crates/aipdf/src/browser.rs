@@ -79,7 +79,7 @@ fn render_html_to_pdf(html: &str, base_dir: Option<&Path>, page: &PageOptions) -
     };
     let injected = inject_print_styles(html, page);
     let stamp = std::process::id();
-    let html_tmp = dir.join(format!(".aipdf-print-{stamp}.html"));
+    let html_tmp = dir.join(format!(".ai.pdf-print-{stamp}.html"));
     std::fs::write(&html_tmp, injected.as_bytes())?;
 
     let out_pdf = std::env::temp_dir().join(format!("aipdf-browser-{stamp}.pdf"));

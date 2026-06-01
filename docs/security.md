@@ -1,6 +1,6 @@
 # Security Analysis
 
-The `.aipdf` semantic layer is data, not behavior.
+The `.ai.pdf` semantic layer is data, not behavior.
 
 ## Threat Model
 

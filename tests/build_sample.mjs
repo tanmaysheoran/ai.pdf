@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { brotliCompressSync, constants } from "node:zlib";
 
 const xmlPath = new URL("../samples/minimal.xml", import.meta.url);
-const outPath = new URL("../samples/minimal.aipdf", import.meta.url);
+const outPath = new URL("../samples/minimal.ai.pdf", import.meta.url);
 const xml = readFileSync(xmlPath, "utf8").trim();
 const compressed = brotliCompressSync(Buffer.from(xml), {
   params: {

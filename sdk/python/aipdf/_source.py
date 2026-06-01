@@ -16,7 +16,7 @@ def build_from_source(source: str, kind: str) -> str:
     Convert source text to semantic XML.
 
     kind must be one of: 'xml', 'markdown', 'html', 'typst'.
-    Returns the semantic XML string (does NOT produce a .aipdf file — that's
+    Returns the semantic XML string (does NOT produce a .ai.pdf file — that's
     the Rust CLI's job).
     """
     if kind not in ("xml", "markdown", "html", "typst"):

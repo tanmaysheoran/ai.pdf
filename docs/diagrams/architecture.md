@@ -10,14 +10,14 @@ flowchart LR
   Validate --> Compress["Brotli semantic XML"]
   Render --> Embed["PDF associated embedded file"]
   Compress --> Embed
-  Embed --> AIPDF["Valid .aipdf PDF"]
+  Embed --> AIPDF["Valid .ai.pdf PDF"]
 ```
 
 ## Parse Pipeline
 
 ```mermaid
 flowchart LR
-  File[".aipdf or .pdf"] --> Detect["Detect /AF or EmbeddedFiles"]
+  File[".ai.pdf or .pdf"] --> Detect["Detect /AF or EmbeddedFiles"]
   Detect --> HasSemantic{"Semantic XML found?"}
   HasSemantic -->|yes| Decompress["Brotli decompress"]
   Decompress --> Validate["Schema/security checks"]

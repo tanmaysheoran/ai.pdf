@@ -22,7 +22,7 @@ fn browser_render_attaches_detectable_layer() {
 <ul><li>first item</li><li>second item</li></ul>
 </body></html>"#;
 
-    // Write into the temp dir so no `.aipdf-print-*` file lands in the repo.
+    // Write into the temp dir so no `.ai.pdf-print-*` file lands in the repo.
     let base = std::env::temp_dir();
     let out = build_aipdf_browser(html, Some(&base), &BuildOptions::default())
         .expect("browser render should succeed when Chrome is present");

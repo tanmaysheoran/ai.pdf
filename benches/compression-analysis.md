@@ -10,7 +10,7 @@ For each document:
 2. Serialize deterministic semantic XML.
 3. Brotli-compress the XML.
 4. Embed it as `aipdf-semantic.xml.br`.
-5. Compare final `.aipdf` size with the ordinary PDF baseline.
+5. Compare final `.ai.pdf` size with the ordinary PDF baseline.
 
 ## Prototype Sample
 
@@ -18,7 +18,7 @@ For each document:
 | --- | ---: | --- |
 | semantic XML | 1,107 bytes | normalized XML extracted from sample |
 | Brotli semantic payload | 435 bytes | embedded bytes |
-| `.aipdf` sample | 2,576 bytes | valid PDF 1.7, one page |
+| `.ai.pdf` sample | 2,576 bytes | valid PDF 1.7, one page |
 | semantic compression ratio | 0.393 | compressed semantic bytes / XML bytes |
 
 Small one-page samples may exceed the percentage target because PDF object overhead dominates. The percentage target is meaningful for realistic multi-page documents where page content is larger than the semantic attachment.
@@ -31,4 +31,4 @@ Small one-page samples may exceed the percentage target because PDF object overh
 | Tagged PDF | excellent | moderate | low to medium |
 | OCR PDF | excellent | text layer only | high |
 | DjVu | limited in modern browsers | text layer possible | low |
-| `.aipdf` V1 | ordinary PDF compatible | explicit XML tree | target <3%, max <10% |
+| `.ai.pdf` V1 | ordinary PDF compatible | explicit XML tree | target <3%, max <10% |

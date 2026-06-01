@@ -4,7 +4,7 @@ Status: prototype, open for implementation feedback.
 
 ## Goals
 
-`.aipdf` is a PDF-compatible extension that embeds a compact semantic XML layer inside an ordinary PDF. The PDF remains the visual rendering authority. The XML is the machine-structure authority.
+`.ai.pdf` is a PDF-compatible extension that embeds a compact semantic XML layer inside an ordinary PDF. The PDF remains the visual rendering authority. The XML is the machine-structure authority.
 
 V1 is intentionally small:
 
@@ -16,7 +16,7 @@ V1 is intentionally small:
 
 ## Container
 
-An `.aipdf` file is a PDF 1.7 or PDF 2.0 compatible file with a different extension.
+An `.ai.pdf` file is a PDF 1.7 or PDF 2.0 compatible file with a different extension.
 
 Required PDF-level objects:
 

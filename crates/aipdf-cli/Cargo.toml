@@ -3,7 +3,7 @@ name = "aipdf-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "CLI for minimal semantic .aipdf files"
+description = "CLI for minimal semantic .ai.pdf files"
 
 [[bin]]
 name = "aipdf"

@@ -34,7 +34,7 @@ assert "Figures[1]" in maximal.to_onto()
 assert len(maximal.get_tables()) == 1
 
 # CLI-delegating helpers: only exercised when the aipdf binary is reachable.
-_bin = shutil.which(aipdf.aipdf_binary()) or (
+_bin = shutil.which(aipdf.ai.pdf_binary()) or (
     str(ROOT / "target" / "debug" / "aipdf")
     if (ROOT / "target" / "debug" / "aipdf").exists()
     else None

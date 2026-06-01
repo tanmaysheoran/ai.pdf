@@ -76,7 +76,7 @@
 
     <figure id="fig1" page="2" bbox="72,560,540,740" role="figure" alt="AIPDF processing pipeline diagram">
       <image src="1.jpg" alt="AIPDF system architecture: source input normalization through semantic XML validation to PDF assembly with embedded Brotli-compressed payload"/>
-      <caption id="cap-fig1" page="2" role="caption">Figure 1: The AIPDF processing pipeline from raw source input to the final .aipdf file. Each stage has a clearly defined interface: source.rs handles normalization, security.rs handles sanitization, xml.rs handles validation, and pdf.rs or render.rs handles final assembly.</caption>
+      <caption id="cap-fig1" page="2" role="caption">Figure 1: The AIPDF processing pipeline from raw source input to the final .ai.pdf file. Each stage has a clearly defined interface: source.rs handles normalization, security.rs handles sanitization, xml.rs handles validation, and pdf.rs or render.rs handles final assembly.</caption>
     </figure>
 
     <table id="tbl1" page="2" role="table">
@@ -138,7 +138,7 @@
   -&gt; xml::validate_xml
   -&gt; pdf::brotli_compress
   -&gt; render::build_rendered_pdf  (Full mode)
-  -&gt; .aipdf file</codeBlock>
+  -&gt; .ai.pdf file</codeBlock>
 
       <annotation id="ann1" page="2" role="annotation">The data flow is strictly unidirectional. No stage has feedback into a prior stage. This makes the pipeline fully testable at each boundary.</annotation>
     </section>
@@ -231,7 +231,7 @@ let pdf = build_aipdf(&amp;xml, &amp;BuildOptions {
 
     <paragraph id="p11" page="5" role="paragraph">The security model is designed to prevent three attack classes: prompt injection via the semantic layer, PDF action exploitation, and denial-of-service via oversized payloads. Each is handled at a different layer of the pipeline.</paragraph>
 
-    <note id="note2" page="5" role="note">Security sanitization runs on every XML path — both at build time (before embedding) and at extraction time (after decompression). This provides defense in depth: a tampered .aipdf file cannot inject unsanitized content into the extraction pipeline.</note>
+    <note id="note2" page="5" role="note">Security sanitization runs on every XML path — both at build time (before embedding) and at extraction time (after decompression). This provides defense in depth: a tampered .ai.pdf file cannot inject unsanitized content into the extraction pipeline.</note>
 
     <section id="s-sanitize" level="2" page="5">
       <title id="t-sanitize" page="5" role="title">Disallowed Markers</title>
@@ -281,7 +281,7 @@ let pdf = build_aipdf(&amp;xml, &amp;BuildOptions {
       <codeBlock id="code4" page="6" language="rust">use aipdf::{AipdfDocument, BuildOptions, RenderMode, PageOptions};
 
 // Open and query
-let doc = AipdfDocument::open("document.aipdf")?;
+let doc = AipdfDocument::open("document.ai.pdf")?;
 let xml    = doc.to_xml()?;
 let md     = doc.to_markdown()?;
 let onto   = doc.to_onto()?;
@@ -299,7 +299,7 @@ let cites  = doc.find_citations()?;</codeBlock>
 
       <codeBlock id="code5" page="6" language="python">import aipdf
 
-doc = aipdf.open("document.aipdf")
+doc = aipdf.open("document.ai.pdf")
 print(doc.to_markdown())
 print(doc.to_onto())
 
@@ -317,7 +317,7 @@ xml = build_from_source(typ_content,  "typst")</codeBlock>
 
       <codeBlock id="code6" page="7" language="typescript">import { open, buildFromSource } from 'aipdf';
 
-const doc = await open('document.aipdf');
+const doc = await open('document.ai.pdf');
 console.log(doc.toMarkdown());
 console.log(doc.toOnto());
 
@@ -392,7 +392,7 @@ const xmlMd = buildFromSource(markdownContent, 'markdown');</codeBlock>
 
     <definitionList id="defs2" page="8">
       <definition id="def4" term="AIPDF">AI-native PDF extension format. A valid PDF 1.7 file with a Brotli-compressed semantic XML payload embedded as an associated file.</definition>
-      <definition id="def5" term="semantic layer">The embedded aipdf-semantic.xml.br associated file containing the machine-readable document structure. Absent in plain PDFs; present in all .aipdf files.</definition>
+      <definition id="def5" term="semantic layer">The embedded aipdf-semantic.xml.br associated file containing the machine-readable document structure. Absent in plain PDFs; present in all .ai.pdf files.</definition>
       <definition id="def6" term="associated file">A PDF 2.0 concept (also backported to PDF 1.7 via the AF array) for files embedded inside a PDF and logically associated with its content.</definition>
       <definition id="def7" term="ONTO format">A columnar, token-efficient export representation for LLM ingestion. Emits Document, Sections, Blocks, Tables, Figures, and References as tab-separated records.</definition>
       <definition id="def8" term="RenderMode">An enum with two variants: Minimal (9-object hand-crafted PDF, default) and Full (production layout engine with multi-page flow and styled elements).</definition>
