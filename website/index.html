@@ -458,7 +458,7 @@
       border-top:none; border-radius:0 0 12px 12px;
       padding:28px 32px;
       font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.85;
-      color:var(--muted); overflow-x:auto;
+      color:var(--muted); overflow-x:auto; white-space:pre-wrap;
       transition:background .25s, border-color .25s;
     }
     .ck { color:var(--purple); } .cf { color:var(--blue); }
@@ -473,7 +473,7 @@
       background:var(--code-bg); border:1px solid var(--border);
       border-radius:12px; padding:28px;
       font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.8;
-      color:var(--muted); overflow-x:auto;
+      color:var(--muted); overflow-x:auto; white-space:pre-wrap;
       transition:background .25s, border-color .25s;
     }
     .block-list { display:flex; flex-direction:column; gap:8px; }
@@ -755,7 +755,126 @@
     .reveal.in { opacity:1; transform:none; }
 
     /* ─────────────────────────────────────────────────────────────────
-       Responsive
+       Light theme enhancements
+    ───────────────────────────────────────────────────────────────── */
+
+    /* Token overrides: better code contrast, stronger hero glow */
+    [data-theme="light"] {
+      --code-bg:   #e8e8e0;
+      --hero-glow: rgba(47,126,214,.13);
+    }
+
+    /* Hero: cool-to-warm gradient top, orbs nearly invisible */
+    [data-theme="light"] .hero-outer {
+      background: linear-gradient(172deg, #dfe8db 0%, #f5f5f0 52%);
+    }
+    [data-theme="light"] .hero-orb { opacity: .12; }
+
+    /* Card elevation — the biggest light-mode quality fix */
+    [data-theme="light"] .bento-card {
+      border-color: rgba(22,22,26,.08);
+      box-shadow: 0 1px 3px rgba(22,22,26,.06), 0 4px 16px rgba(22,22,26,.05);
+    }
+    [data-theme="light"] .bento-card:hover {
+      border-color: rgba(22,22,26,.14);
+      box-shadow: 0 6px 28px rgba(22,22,26,.12), 0 1px 4px rgba(22,22,26,.06);
+    }
+    [data-theme="light"] .mini-card,
+    [data-theme="light"] .export-card {
+      border-color: rgba(22,22,26,.08);
+      box-shadow: 0 1px 4px rgba(22,22,26,.06);
+    }
+    [data-theme="light"] .mini-card:hover,
+    [data-theme="light"] .export-card:hover {
+      border-color: rgba(22,22,26,.13);
+      box-shadow: 0 4px 20px rgba(22,22,26,.1);
+    }
+    [data-theme="light"] .export-card.featured {
+      box-shadow: 0 0 0 1px rgba(47,126,214,.28),
+                  0 6px 24px rgba(47,126,214,.1),
+                  0 1px 4px rgba(22,22,26,.05);
+    }
+    [data-theme="light"] .export-card.featured:hover {
+      box-shadow: 0 0 0 1px rgba(47,126,214,.45),
+                  0 12px 36px rgba(47,126,214,.16),
+                  0 2px 6px rgba(22,22,26,.06);
+    }
+    [data-theme="light"] .layer {
+      border-color: rgba(22,22,26,.08);
+      box-shadow: 0 1px 3px rgba(22,22,26,.04);
+    }
+    [data-theme="light"] .cli-card,
+    [data-theme="light"] .sec-card {
+      border-color: rgba(22,22,26,.08);
+      box-shadow: 0 1px 4px rgba(22,22,26,.05);
+    }
+    [data-theme="light"] .install-inner {
+      border-color: rgba(22,22,26,.09);
+      box-shadow: 0 2px 10px rgba(22,22,26,.07);
+    }
+    [data-theme="light"] .mcp-inner {
+      border-color: rgba(22,22,26,.09);
+      box-shadow: 0 4px 24px rgba(22,22,26,.08);
+    }
+    [data-theme="light"] .stats-inner {
+      border-color: rgba(22,22,26,.09);
+      box-shadow: 0 2px 14px rgba(22,22,26,.07);
+    }
+    [data-theme="light"] .terminal {
+      box-shadow: 0 20px 50px rgba(22,22,26,.18), 0 0 0 1px rgba(22,22,26,.12);
+    }
+    [data-theme="light"] .nav {
+      border-color: rgba(22,22,26,.12);
+      box-shadow: 0 2px 20px rgba(22,22,26,.1), 0 1px 0 rgba(255,255,255,.9) inset;
+    }
+
+    /* Tabs: stronger border in light */
+    [data-theme="light"] .tab-row { border-bottom-color: rgba(22,22,26,.12); }
+    [data-theme="light"] .code-pad {
+      border-color: rgba(22,22,26,.1);
+    }
+
+    /* Stats: no glow on dark text */
+    [data-theme="light"] .stat-num         { text-shadow: none; }
+    [data-theme="light"] .stat:hover .stat-num { text-shadow: none; }
+
+    /* Stats: distinct accent per number in light mode */
+    [data-theme="light"] .stats-inner .stat:nth-child(1) .stat-num { color: var(--blue);   }
+    [data-theme="light"] .stats-inner .stat:nth-child(2) .stat-num { color: var(--green);  }
+    [data-theme="light"] .stats-inner .stat:nth-child(3) .stat-num { color: var(--purple); }
+    [data-theme="light"] .stats-inner .stat:nth-child(4) .stat-num { color: var(--orange); }
+
+    /* Mini-card ext label: use the accent color */
+    [data-theme="light"] .mc-xml  .mini-card-ext { color: var(--purple); }
+    [data-theme="light"] .mc-html .mini-card-ext { color: var(--orange); }
+    [data-theme="light"] .mc-md   .mini-card-ext { color: var(--blue);   }
+    [data-theme="light"] .mc-typ  .mini-card-ext { color: var(--green);  }
+    [data-theme="light"] .mc-pdf  .mini-card-ext { color: var(--red);    }
+
+    /* Dot grid: slightly more visible */
+    [data-theme="light"] .dot-grid { opacity: .6; }
+
+    /* Eyebrow dot: softer glow */
+    [data-theme="light"] .eyebrow::before {
+      box-shadow: 0 0 5px rgba(47,126,214,.45);
+    }
+
+    /* Rule: warmer ink gradient for light */
+    [data-theme="light"] .rule {
+      background: linear-gradient(90deg, transparent 0%, rgba(22,22,26,.08) 20%, rgba(47,126,214,.25) 50%, rgba(22,22,26,.08) 80%, transparent 100%);
+    }
+
+    /* Block-list rows in light */
+    [data-theme="light"] .block-row {
+      border-color: rgba(22,22,26,.08);
+      box-shadow: 0 1px 3px rgba(22,22,26,.04);
+    }
+    [data-theme="light"] .tool-pill {
+      border-color: rgba(22,22,26,.1);
+      box-shadow: 0 1px 2px rgba(22,22,26,.04);
+    }
+
+    /* Responsive
     ───────────────────────────────────────────────────────────────── */
     @media(max-width:1024px) {
       .hero { grid-template-columns:1fr; padding:100px 32px 60px; }
@@ -1016,8 +1135,7 @@
     <p class="section-sub">Every block carries <code>id</code>, <code>page</code>, <code>bbox</code>, and <code>role</code>. Version negotiation accepts any <code>1.x</code>; unknown elements are silently ignored.</p>
   </div>
   <div class="fmt-grid reveal">
-    <div class="xml-block">
-<span style="color:var(--dim)">&lt;!-- aipdf-semantic.xml (Brotli-compressed, embedded) --&gt;</span>
+    <div class="xml-block"><span style="color:var(--dim)">&lt;!-- aipdf-semantic.xml (Brotli-compressed, embedded) --&gt;</span>
 <span style="color:var(--purple)">&lt;document</span> <span style="color:var(--blue)">version</span>=<span style="color:var(--green)">"1.0"</span><span style="color:var(--purple)">&gt;</span>
   <span style="color:var(--purple)">&lt;metadata&gt;</span>
     <span style="color:var(--purple)">&lt;title&gt;</span>Research Summary<span style="color:var(--purple)">&lt;/title&gt;</span>
@@ -1036,8 +1154,7 @@
       <span style="color:var(--purple)">&lt;tbody&gt;&lt;row&gt;&lt;cell&gt;</span>Baseline<span style="color:var(--purple)">&lt;/cell&gt;&lt;cell&gt;</span>71.2<span style="color:var(--purple)">&lt;/cell&gt;&lt;/row&gt;&lt;/tbody&gt;</span>
     <span style="color:var(--purple)">&lt;/table&gt;</span>
   <span style="color:var(--purple)">&lt;/section&gt;</span>
-<span style="color:var(--purple)">&lt;/document&gt;</span>
-    </div>
+<span style="color:var(--purple)">&lt;/document&gt;</span></div>
     <div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px;font-family:'JetBrains Mono',monospace;">Block types</p>
       <div class="block-list">
