@@ -1,3 +1,4 @@
+use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
@@ -75,7 +76,20 @@ fn xml_to_markdown_ast(xml: &str) -> MarkdownAst {
             },
             Ok(Event::Text(t)) => {
                 if capture.is_some() || in_cell {
-                    current.push_str(t.unescape().unwrap_or_default().trim());
+                    current.push_str(
+                        t.decode()
+                            .map(|s| unescape(&s).map(|c| c.into_owned()).unwrap_or_else(|_| s.into_owned()))
+                            .unwrap_or_default()
+                            .trim(),
+                    );
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                if capture.is_some() || in_cell {
+                    let name = r.decode().unwrap_or_default();
+                    let entity = format!("&{};", name);
+                    let resolved = unescape(&entity).map(|c| c.into_owned()).unwrap_or(entity);
+                    current.push_str(resolved.trim());
                 }
             }
             Ok(Event::CData(t)) => {

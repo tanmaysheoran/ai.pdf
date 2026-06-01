@@ -1,4 +1,5 @@
 use crate::{security::sanitize_xml, AipdfError, Result};
+use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
@@ -156,7 +157,19 @@ pub fn get_reading_order(xml: &str) -> Result<Vec<SemanticBlock>> {
             }
             Ok(Event::Text(t)) => {
                 if let Some(block) = current.as_mut() {
-                    block.text.push_str(&t.unescape().unwrap_or_default());
+                    block.text.push_str(
+                        &t.decode()
+                            .map(|s| unescape(&s).map(|c| c.into_owned()).unwrap_or_else(|_| s.into_owned()))
+                            .unwrap_or_default(),
+                    );
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                if let Some(block) = current.as_mut() {
+                    let name = r.decode().unwrap_or_default();
+                    let entity = format!("&{};", name);
+                    let resolved = unescape(&entity).map(|c| c.into_owned()).unwrap_or(entity);
+                    block.text.push_str(&resolved);
                 }
             }
             Ok(Event::CData(t)) => {
@@ -232,11 +245,24 @@ fn collect_element_text(xml: &str, element: &str) -> Result<Vec<String>> {
             }
             Ok(Event::Start(_)) if capture => depth += 1,
             Ok(Event::Text(t)) if capture => {
-                let piece = t.unescape().unwrap_or_default();
+                let piece = t
+                    .decode()
+                    .map(|s| unescape(&s).map(|c| c.into_owned()).unwrap_or_else(|_| s.into_owned()))
+                    .unwrap_or_default();
                 if !text.is_empty() && !piece.trim().is_empty() {
                     text.push(' ');
                 }
                 text.push_str(piece.trim());
+            }
+            Ok(Event::GeneralRef(r)) if capture => {
+                let name = r.decode().unwrap_or_default();
+                let entity = format!("&{};", name);
+                let resolved = unescape(&entity).map(|c| c.into_owned()).unwrap_or(entity);
+                let piece = resolved.trim().to_string();
+                if !text.is_empty() && !piece.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(&piece);
             }
             Ok(Event::End(_)) if capture => {
                 depth = depth.saturating_sub(1);

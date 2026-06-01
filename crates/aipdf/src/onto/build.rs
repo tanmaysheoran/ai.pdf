@@ -4,6 +4,7 @@ use super::{
     BlockRecord, Capture, CaptureKind, FigureRecord, ReferenceRecord, SectionContext, SectionRecord,
     TableRecord,
 };
+use quick_xml::escape::unescape;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 
@@ -171,7 +172,19 @@ pub fn xml_to_onto(xml: &str) -> String {
             }
             Ok(Event::Text(t)) => {
                 if let Some(active) = capture.as_mut() {
-                    active.text.push_str(&t.unescape().unwrap_or_default());
+                    active.text.push_str(
+                        &t.decode()
+                            .map(|s| unescape(&s).map(|c| c.into_owned()).unwrap_or_else(|_| s.into_owned()))
+                            .unwrap_or_default(),
+                    );
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                if let Some(active) = capture.as_mut() {
+                    let name = r.decode().unwrap_or_default();
+                    let entity = format!("&{};", name);
+                    let resolved = unescape(&entity).map(|c| c.into_owned()).unwrap_or(entity);
+                    active.text.push_str(&resolved);
                 }
             }
             Ok(Event::CData(t)) => {

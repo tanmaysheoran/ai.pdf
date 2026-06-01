@@ -1,3 +1,4 @@
+use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
@@ -185,7 +186,10 @@ pub(super) fn parse_elements(xml: &str) -> Vec<DocElem> {
                 }
             }
             Ok(Event::Text(t)) => {
-                let text = t.unescape().unwrap_or_default().to_string();
+                let text = t
+                    .decode()
+                    .map(|s| unescape(&s).map(|c| c.into_owned()).unwrap_or_else(|_| s.into_owned()))
+                    .unwrap_or_default();
                 if in_meta_title {
                     meta_title.push_str(&text);
                 } else if in_cell || in_item || in_para || in_title || in_citation
@@ -193,6 +197,19 @@ pub(super) fn parse_elements(xml: &str) -> Vec<DocElem> {
                     || in_table_caption || in_fig_caption
                 {
                     current.push_str(text.trim());
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                let name = r.decode().unwrap_or_default();
+                let entity = format!("&{};", name);
+                let resolved = unescape(&entity).map(|c| c.into_owned()).unwrap_or(entity);
+                if in_meta_title {
+                    meta_title.push_str(&resolved);
+                } else if in_cell || in_item || in_para || in_title || in_citation
+                    || in_equation || in_note || in_code || in_reference
+                    || in_table_caption || in_fig_caption
+                {
+                    current.push_str(&resolved);
                 }
             }
             Ok(Event::CData(t)) => {
