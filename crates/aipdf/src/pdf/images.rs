@@ -83,11 +83,38 @@ pub fn extract_images(bytes: &[u8]) -> Result<Vec<ImageExtract>> {
     let compressed = find_semantic_compressed(bytes).ok_or(AipdfError::SemanticLayerNotFound)?;
     let xml = decompress_semantic(&compressed)?;
     let xml_images = parse_image_refs(&xml);
+
+    let doc = lopdf::Document::load_mem(bytes).map_err(|e| AipdfError::Pdf(e.to_string()))?;
+    let xobjects = collect_image_xobjects(&doc);
+
     if xml_images.is_empty() {
-        return Ok(Vec::new());
+        // Ingested PDF: semantic XML has no <image> refs, but XObjects may exist.
+        // Auto-name images by index so callers get them without needing semantic refs.
+        let mut result = Vec::new();
+        for (i, xo) in xobjects.iter().enumerate() {
+            let ext = match xo.filter {
+                ImgFilter::Dct => "jpg",
+                ImgFilter::Flate => "png",
+            };
+            let src = format!("image-{:03}.{ext}", i + 1);
+            match decode_xobject(xo) {
+                Some(payload) => result.push(ImageExtract {
+                    src,
+                    alt: String::new(),
+                    width: xo.width,
+                    height: xo.height,
+                    payload,
+                }),
+                None => eprintln!(
+                    "note: skipping image '{src}' — unsupported XObject encoding"
+                ),
+            }
+        }
+        return Ok(result);
     }
 
-    // De-duplicate by src, preserving first-seen order.
+    // Built PDF: de-duplicate refs by src, preserving first-seen order, then match
+    // positionally to the n-th sorted XObject.
     let mut unique: Vec<(String, String)> = Vec::new();
     let mut seen_src = std::collections::HashSet::new();
     for (src, alt) in xml_images {
@@ -95,9 +122,6 @@ pub fn extract_images(bytes: &[u8]) -> Result<Vec<ImageExtract>> {
             unique.push((src, alt));
         }
     }
-
-    let doc = lopdf::Document::load_mem(bytes).map_err(|e| AipdfError::Pdf(e.to_string()))?;
-    let xobjects = collect_image_xobjects(&doc);
 
     let count = unique.len().min(xobjects.len());
     let mut result = Vec::with_capacity(count);

@@ -35,14 +35,27 @@ pub(super) fn collect_image_xobjects(doc: &lopdf::Document) -> Vec<RawXObject> {
 
     let mut seen: BTreeMap<String, RawXObject> = BTreeMap::new();
     for (_page_num, page_id) in doc.get_pages() {
-        let Ok((Some(resources), _)) = doc.get_page_resources(page_id) else {
-            continue;
+        // lopdf's get_page_resources does not resolve an indirect /Resources
+        // reference on the page itself (only inherited parent refs). Resolve
+        // the Resources entry manually so both inline and indirect dicts work.
+        let resources_dict: &lopdf::Dictionary = {
+            let Ok(page_obj) = doc.get_object(page_id) else { continue };
+            let Ok(page_dict) = page_obj.as_dict() else { continue };
+            let Ok(res_val) = page_dict.get(b"Resources") else { continue };
+            let Ok((_, resolved)) = doc.dereference(res_val) else { continue };
+            let Ok(d) = resolved.as_dict() else { continue };
+            d
         };
-        let Some(xobjects) = resources
-            .get(b"XObject")
-            .ok()
-            .and_then(|o| o.as_dict().ok())
-        else {
+        let xobj_raw = match resources_dict.get(b"XObject") {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        // The /XObject value is often itself an indirect reference to a dict.
+        let (_, xobj_deref) = match doc.dereference(xobj_raw) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let Some(xobjects) = xobj_deref.as_dict().ok() else {
             continue;
         };
         for (name_bytes, obj) in xobjects.iter() {
