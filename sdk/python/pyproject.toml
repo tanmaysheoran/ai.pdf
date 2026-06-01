@@ -10,6 +10,8 @@ license = { text = "Apache-2.0" }
 [project.scripts]
 # MCP stdio server exposing .ai.pdf tools to agents.
 aipdf-mcp = "aipdf.mcp_server:serve"
+# Explicitly download and install the aipdf CLI binary for this platform.
+aipdf-install-cli = "aipdf.cli:install_binary_cli"
 
 [build-system]
 requires = ["hatchling"]

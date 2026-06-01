@@ -5,13 +5,33 @@
 // extraction (XObject decode + raster re-encode) are owned by the Rust core,
 // so these shell out to the installed `aipdf` binary — the same pattern the
 // MCP server uses. Set AIPDF_BIN to override the binary path (default: aipdf).
+//
+// The `postinstall` script (scripts/postinstall.mjs) downloads a pre-built
+// binary into <package-root>/bin/ at npm-install time. aipdfBinary() checks
+// that location first so the SDK works without a separate system install.
 // ---------------------------------------------------------------------------
 
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { AIPDFError, BuildOptions, IngestOptions, ExportFormat, ExportResult } from "./types.js";
 
+// Absolute path to the binary downloaded by postinstall, if it exists.
+const _localBin = (() => {
+  try {
+    const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const ext = process.platform === "win32" ? ".exe" : "";
+    return join(pkgRoot, "bin", `aipdf${ext}`);
+  } catch {
+    return null;
+  }
+})();
+
 export function aipdfBinary(): string {
-  return process.env.ai.pdf_BIN ?? "aipdf";
+  if (process.env.AIPDF_BIN) return process.env.AIPDF_BIN;
+  if (_localBin && existsSync(_localBin)) return _localBin;
+  return "aipdf";
 }
 
 export function runCli(args: string[]): string {

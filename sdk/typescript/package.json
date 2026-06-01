@@ -5,9 +5,15 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "scripts",
+    "bin/.gitkeep"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "postinstall": "node scripts/postinstall.mjs"
   },
   "license": "Apache-2.0",
   "devDependencies": {
