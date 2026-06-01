@@ -1,3 +1,4 @@
+use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
@@ -118,7 +119,10 @@ pub fn xml_to_markdown(xml: &str) -> String {
                 _ => {}
             },
             Ok(Event::Text(t)) => {
-                let text = t.unescape().unwrap_or_default();
+                let text = t
+                    .decode()
+                    .map(|s| unescape(&s).map(|c| c.into_owned()).unwrap_or_else(|_| s.into_owned()))
+                    .unwrap_or_default();
                 if in_title
                     || in_paragraph
                     || in_caption
@@ -133,6 +137,26 @@ pub fn xml_to_markdown(xml: &str) -> String {
                     || in_cell
                 {
                     current.push_str(text.trim());
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                if in_title
+                    || in_paragraph
+                    || in_caption
+                    || in_citation
+                    || in_equation
+                    || in_code
+                    || in_item
+                    || in_note
+                    || in_footnote
+                    || in_reference
+                    || in_definition
+                    || in_cell
+                {
+                    let name = r.decode().unwrap_or_default();
+                    let entity = format!("&{};", name);
+                    let resolved = unescape(&entity).map(|c| c.into_owned()).unwrap_or(entity);
+                    current.push_str(&resolved);
                 }
             }
             Ok(Event::CData(t)) => {

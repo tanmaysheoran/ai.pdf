@@ -242,7 +242,7 @@ fn main() -> aipdf::Result<()> {
                         let xml2 = extract_semantic_xml(&bytes)?;
                         if xml2.contains("<image ") {
                             eprintln!("note: document contains image references but no extractable image XObjects were found");
-                            eprintln!("      image extraction requires a PDF built with --render full");
+                            eprintln!("      this PDF was built with --render minimal or --render browser and embeds no raster XObjects");
                         }
                     }
                     for img in imgs {

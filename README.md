@@ -19,6 +19,43 @@ PDF is the dominant format for structured documents — papers, contracts, repor
 
 ---
 
+## Installation
+
+### One-liner (Linux / macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tanmaysheoran/ai.pdf/main/install.sh | sh
+```
+
+The script checks for Rust/Cargo (installing via [rustup](https://rustup.rs) if absent), then builds and installs the `aipdf` binary into `~/.cargo/bin`.
+
+### From source
+
+```bash
+git clone https://github.com/tanmaysheoran/ai.pdf.git
+cd ai.pdf
+./install.sh          # detects local source automatically
+```
+
+Or directly with Cargo:
+
+```bash
+cargo install --path crates/aipdf-cli
+```
+
+### Verify
+
+```bash
+aipdf --help
+```
+
+> If `aipdf` is not found after install, add `~/.cargo/bin` to your `PATH`:
+> ```bash
+> export PATH="$HOME/.cargo/bin:$PATH"
+> ```
+
+---
+
 ## How It Works
 
 Every `.ai.pdf` file contains:
@@ -276,6 +313,7 @@ benches/          Compression analysis
 
 ```bash
 git clone https://github.com/tanmaysheoran/ai.pdf.git
+
 cd ai.pdf
 
 # Rust

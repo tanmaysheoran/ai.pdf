@@ -6,16 +6,16 @@ license.workspace = true
 description = "Core library for minimal semantic .ai.pdf files"
 
 [dependencies]
-brotli = "7"
+brotli = "8"
 flate2 = "1.1.9"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 lopdf = "0.40.0"
 pulldown-cmark = "0.13.4"
-quick-xml = "0.37"
-scraper = "0.21"
+quick-xml = "0.40"
+scraper = "0.27"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 thiserror = "2"
 ttf-parser = "0.25.1"
 
