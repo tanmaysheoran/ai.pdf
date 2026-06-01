@@ -77,13 +77,21 @@ interface InspectReport {
 
 ## Write API (requires `aipdf` CLI)
 
-These functions shell out to the `aipdf` binary. Build it with:
+These functions shell out to the `aipdf` binary.
+
+**Install the CLI** (one-liner):
 
 ```bash
-cargo build -p aipdf-cli --release
+curl -fsSL https://raw.githubusercontent.com/tanmaysheoran/ai.pdf/main/install.sh | sh
 ```
 
-Or point to an existing binary via the `AIPDF_BIN` environment variable (default: `aipdf`).
+Or from a cloned repo:
+
+```bash
+./install.sh          # or: cargo install --path crates/aipdf-cli
+```
+
+Point to a custom binary via the `AIPDF_BIN` environment variable (default: `aipdf`).
 
 ### `buildPdf` — create a `.ai.pdf` from source
 
