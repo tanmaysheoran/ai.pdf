@@ -358,7 +358,7 @@
       color:var(--text); background:var(--code-inline);
       padding:1px 6px; border-radius:4px; font-size:13px;
     }
-    .rule { border:none; border-top:1px solid var(--border-b); max-width:1280px; margin:0 auto; }
+    .rule { border:none; height:1px; max-width:1280px; margin:0 auto; background:linear-gradient(90deg, transparent 0%, var(--border) 20%, color-mix(in srgb,var(--blue) 35%,transparent) 50%, var(--border) 80%, transparent 100%); }
 
     /* ─────────────────────────────────────────────────────────────────
        Bento grid
@@ -625,6 +625,130 @@
     }
 
     /* ─────────────────────────────────────────────────────────────────
+       Gradient text
+    ───────────────────────────────────────────────────────────────── */
+    .grad-text {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Hero animated orbs
+    ───────────────────────────────────────────────────────────────── */
+    .hero-orb { position:absolute; border-radius:50%; pointer-events:none; z-index:0; }
+    .orb-1 {
+      width:700px; height:500px;
+      background:radial-gradient(ellipse at center, rgba(79,149,230,.22) 0%, transparent 65%);
+      top:-130px; right:-200px;
+      animation:orb1 15s ease-in-out infinite;
+    }
+    .orb-2 {
+      width:520px; height:520px;
+      background:radial-gradient(ellipse at center, rgba(167,139,250,.17) 0%, transparent 65%);
+      bottom:-80px; left:-40px;
+      animation:orb2 20s ease-in-out infinite;
+    }
+    .orb-3 {
+      width:340px; height:340px;
+      background:radial-gradient(ellipse at center, rgba(61,214,140,.13) 0%, transparent 65%);
+      top:38%; right:22%;
+      animation:orb1 26s ease-in-out infinite reverse;
+    }
+    [data-theme="light"] .hero-orb { opacity:.35; }
+    @keyframes orb1 {
+      0%,100% { transform:translate(0,0); }
+      33%     { transform:translate(50px,-35px); }
+      66%     { transform:translate(-25px,22px); }
+    }
+    @keyframes orb2 {
+      0%,100% { transform:translate(0,0); }
+      40%     { transform:translate(-35px,25px); }
+      75%     { transform:translate(30px,-18px); }
+    }
+    @media(prefers-reduced-motion:reduce) { .hero-orb { animation:none !important; } }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Nav CTA shimmer
+    ───────────────────────────────────────────────────────────────── */
+    .nav-gh { position:relative; overflow:hidden; }
+    .nav-gh::after {
+      content:''; position:absolute; top:0; left:-100%; width:50%; height:100%;
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent);
+      animation:nav-shine 3.8s ease-in-out infinite;
+    }
+    @keyframes nav-shine { 0%{left:-100%} 55%,100%{left:160%} }
+    @media(prefers-reduced-motion:reduce) { .nav-gh::after { animation:none; } }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Bento card per-color bottom accent line
+    ───────────────────────────────────────────────────────────────── */
+    .bento-card::after {
+      content:''; position:absolute; bottom:0; left:0; right:0;
+      height:2px; background:var(--card-accent, var(--blue));
+      border-radius:0 0 12px 12px; opacity:0; transition:opacity .3s;
+    }
+    .bento-card:hover::after { opacity:.75; }
+    .bc-accent-red    { --card-accent: var(--red);    }
+    .bc-accent-green  { --card-accent: var(--green);  }
+    .bc-accent-blue   { --card-accent: var(--blue);   }
+    .bc-accent-orange { --card-accent: var(--orange); }
+    .bc-accent-purple { --card-accent: var(--purple); }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Mini-card per-extension top accent
+    ───────────────────────────────────────────────────────────────── */
+    .mini-card { position:relative; }
+    .mini-card::before {
+      content:''; position:absolute; top:0; left:0; right:0;
+      height:2px; background:var(--card-top, var(--blue));
+      border-radius:10px 10px 0 0; opacity:.85;
+    }
+    .mc-xml    { --card-top: var(--purple); }
+    .mc-html   { --card-top: var(--orange); }
+    .mc-md     { --card-top: var(--blue);   }
+    .mc-typ    { --card-top: var(--green);  }
+    .mc-pdf    { --card-top: var(--red);    }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Stats glow + count-up reveal
+    ───────────────────────────────────────────────────────────────── */
+    .stat-num {
+      text-shadow:0 0 30px color-mix(in srgb,var(--blue) 45%,transparent);
+      transition:text-shadow .3s;
+    }
+    .stat:hover .stat-num {
+      text-shadow:0 0 50px color-mix(in srgb,var(--blue) 70%,transparent);
+    }
+    .stat-num[data-target] { opacity:0; transform:translateY(10px); transition:opacity .5s .1s, transform .5s .1s; }
+    .stat-num[data-target].counted { opacity:1; transform:none; }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Export ONTO card glow
+    ───────────────────────────────────────────────────────────────── */
+    .export-card.featured {
+      box-shadow:0 0 0 1px color-mix(in srgb,var(--blue) 38%,transparent),
+                 0 8px 32px color-mix(in srgb,var(--blue) 15%,transparent);
+    }
+    .export-card.featured:hover {
+      box-shadow:0 0 0 1px color-mix(in srgb,var(--blue) 58%,transparent),
+                 0 16px 48px color-mix(in srgb,var(--blue) 24%,transparent);
+      transform:translateY(-3px);
+    }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Eyebrow dot accent
+    ───────────────────────────────────────────────────────────────── */
+    .eyebrow { display:flex; align-items:center; gap:7px; }
+    .eyebrow::before {
+      content:''; display:inline-block; width:6px; height:6px;
+      border-radius:50%; background:var(--blue);
+      box-shadow:0 0 8px var(--blue);
+      flex-shrink:0;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────
        Scroll reveal
     ───────────────────────────────────────────────────────────────── */
     .reveal { opacity:0; transform:translateY(20px); transition:opacity .6s cubic-bezier(.16,1,.3,1), transform .6s cubic-bezier(.16,1,.3,1); }
@@ -711,6 +835,9 @@
 <div class="hero-outer">
   <div class="dot-grid" aria-hidden="true"></div>
   <div class="hero-glow"  aria-hidden="true"></div>
+  <div class="hero-orb orb-1" aria-hidden="true"></div>
+  <div class="hero-orb orb-2" aria-hidden="true"></div>
+  <div class="hero-orb orb-3" aria-hidden="true"></div>
 
   <section class="hero" aria-label="Hero">
     <div class="hero-left">
@@ -718,7 +845,7 @@
         <span class="hero-kicker-dot" aria-hidden="true"></span>
         V1 Prototype · Apache 2.0
       </div>
-      <h1>PDF for humans.<br/><em>XML for machines.</em><br/>One file.</h1>
+      <h1>PDF for humans.<br/><em class="grad-text">XML for machines.</em><br/>One file.</h1>
       <p class="hero-desc">
         A <code>.ai.pdf</code> is a fully valid PDF that also embeds a
         Brotli-compressed semantic XML layer — so AI parsers read structure
@@ -787,31 +914,31 @@
     <p class="section-sub">AI systems parsing PDFs today have two bad options. <code>.ai.pdf</code> eliminates both.</p>
   </div>
   <div class="bento reveal">
-    <div class="bento-card bc-1 bc-featured">
+    <div class="bento-card bc-1 bc-featured bc-accent-red">
       <div class="bento-icon bi-red" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>
       </div>
       <h3>OCR on rendered pixels</h3>
       <p>Slow. Lossy. Layout-dependent. Tables shatter. Reading order is guessed. Scanned pages with unusual fonts silently drop content.</p>
     </div>
-    <div class="bento-card bc-2 bc-featured">
+    <div class="bento-card bc-2 bc-featured bc-accent-red">
       <div class="bento-icon bi-red" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>
       </div>
       <h3>Brittle text extraction</h3>
       <p>Column detection fails on complex layouts. Multi-column papers come out as interleaved noise. Citations, cross-references, and figure captions are silently stripped. Math is lost entirely.</p>
     </div>
-    <div class="bento-card bc-3">
+    <div class="bento-card bc-3 bc-accent-green">
       <div class="bento-icon bi-green" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
       <h3>Semantic first</h3>
       <p>Full structure embedded as XML — headings, tables, equations, citations, figures, bbox coordinates.</p>
     </div>
-    <div class="bento-card bc-4">
+    <div class="bento-card bc-4 bc-accent-blue">
       <div class="bento-icon bi-blue" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
       <h3>Valid PDF</h3>
       <p>Opens unchanged in every PDF reader. Legacy readers ignore the embedded layer completely.</p>
     </div>
-    <div class="bento-card bc-5">
+    <div class="bento-card bc-5 bc-accent-orange">
       <div class="bento-icon bi-orange" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
       <h3>Three SDKs</h3>
       <p>Rust, Python, TypeScript — byte-identical output enforced by shared conformance fixtures.</p>
@@ -824,10 +951,10 @@
 <!-- ── stats ─────────────────────────────────────────────────────────────── -->
 <div class="stats-bar">
   <div class="stats-inner reveal">
-    <div class="stat"><div class="stat-num">5</div><div class="stat-label">Input formats accepted</div></div>
-    <div class="stat"><div class="stat-num">4</div><div class="stat-label">Export formats</div></div>
-    <div class="stat"><div class="stat-num">3</div><div class="stat-label">SDKs with byte-identical output</div></div>
-    <div class="stat"><div class="stat-num">16&thinsp;MB</div><div class="stat-label">Maximum decompressed payload</div></div>
+    <div class="stat"><div class="stat-num" data-target="5">5</div><div class="stat-label">Input formats accepted</div></div>
+    <div class="stat"><div class="stat-num" data-target="4">4</div><div class="stat-label">Export formats</div></div>
+    <div class="stat"><div class="stat-num" data-target="3">3</div><div class="stat-label">SDKs with byte-identical output</div></div>
+    <div class="stat"><div class="stat-num" data-target="16" data-suffix=" MB">16&thinsp;MB</div><div class="stat-label">Maximum decompressed payload</div></div>
   </div>
 </div>
 
@@ -937,11 +1064,11 @@
     <h2 class="section-title" id="inputs-h">Build from anything.</h2>
   </div>
   <div class="card-row reveal">
-    <div class="mini-card"><div class="mini-card-ext">.xml</div><p class="mini-card-desc">Direct semantic XML conforming to the V1 schema</p></div>
-    <div class="mini-card"><div class="mini-card-ext">.html</div><p class="mini-card-desc">HTML5 — headings, tables, lists, code, figures</p></div>
-    <div class="mini-card"><div class="mini-card-ext">.md</div><p class="mini-card-desc">Markdown via <code>pulldown-cmark</code> — GFM tables, fenced code, blockquotes, images</p></div>
-    <div class="mini-card"><div class="mini-card-ext">.typ</div><p class="mini-card-desc">Typst — headings, lists, <code>$…$</code> equations, <code>image()</code> figures</p></div>
-    <div class="mini-card"><div class="mini-card-ext">.pdf</div><p class="mini-card-desc"><code>aipdf ingest</code> — text extraction + optional <code>tesseract</code> OCR</p></div>
+    <div class="mini-card mc-xml"><div class="mini-card-ext">.xml</div><p class="mini-card-desc">Direct semantic XML conforming to the V1 schema</p></div>
+    <div class="mini-card mc-html"><div class="mini-card-ext">.html</div><p class="mini-card-desc">HTML5 — headings, tables, lists, code, figures</p></div>
+    <div class="mini-card mc-md"><div class="mini-card-ext">.md</div><p class="mini-card-desc">Markdown via <code>pulldown-cmark</code> — GFM tables, fenced code, blockquotes, images</p></div>
+    <div class="mini-card mc-typ"><div class="mini-card-ext">.typ</div><p class="mini-card-desc">Typst — headings, lists, <code>$…$</code> equations, <code>image()</code> figures</p></div>
+    <div class="mini-card mc-pdf"><div class="mini-card-ext">.pdf</div><p class="mini-card-desc"><code>aipdf ingest</code> — text extraction + optional <code>tesseract</code> OCR</p></div>
   </div>
 </section>
 
@@ -1218,7 +1345,33 @@ console.<span class="cf">log</span>(doc.<span class="cf">toOnto</span>());
   /* ── reduced motion ── */
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     document.querySelectorAll('.reveal').forEach(function(el) { el.classList.add('in'); });
+    document.querySelectorAll('.stat-num[data-target]').forEach(function(el) { el.classList.add('counted'); });
   }
+
+  /* ── count-up animation for stats ── */
+  function countUp(el) {
+    el.classList.add('counted');
+    var target = parseFloat(el.dataset.target);
+    var suffix = el.dataset.suffix || '';
+    var isInt = target === Math.floor(target);
+    var duration = 1400;
+    var startTime = null;
+    function step(ts) {
+      if (!startTime) startTime = ts;
+      var progress = Math.min((ts - startTime) / duration, 1);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      var val = eased * target;
+      el.textContent = (isInt ? Math.round(val) : val.toFixed(1)) + suffix;
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  var statObs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting) { countUp(e.target); statObs.unobserve(e.target); }
+    });
+  }, { threshold: 0.6 });
+  document.querySelectorAll('.stat-num[data-target]').forEach(function(el) { statObs.observe(el); });
 </script>
 </body>
 </html>
