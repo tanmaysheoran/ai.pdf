@@ -31,6 +31,14 @@ curl -fsSL https://raw.githubusercontent.com/tanmaysheoran/ai.pdf/main/install.s
 
 The script checks for Rust/Cargo (installing via [rustup](https://rustup.rs) if absent), then builds and installs the `aipdf` binary into `~/.cargo/bin`.
 
+### One-liner (Windows — PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/tanmaysheoran/ai.pdf/main/install.ps1 | iex
+```
+
+Downloads the pre-built `aipdf-x86_64-windows.zip` from the latest release, extracts `aipdf.exe` into `%USERPROFILE%\.cargo\bin`, and adds that directory to your user `PATH`. Restart your terminal (or open a new one) after install.
+
 ### From source
 
 ```bash
