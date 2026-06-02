@@ -56,7 +56,7 @@ PDF is the dominant format for structured documents — papers, contracts, repor
 ### Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tanmaysheoran/ai.pdf/main/install.sh | sh
+curl -fsSL https://aipdf.lackofabetter.work/install.sh | sh
 ```
 
 Checks for Rust/Cargo (installs via [rustup](https://rustup.rs) if absent), then downloads the pre-built binary or builds from source into `~/.cargo/bin`.
@@ -64,7 +64,7 @@ Checks for Rust/Cargo (installs via [rustup](https://rustup.rs) if absent), then
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/tanmaysheoran/ai.pdf/main/install.ps1 | iex
+irm https://aipdf.lackofabetter.work/install.ps1 | iex
 ```
 
 Downloads the pre-built `aipdf-x86_64-windows.zip`, extracts `aipdf.exe` to `%USERPROFILE%\.cargo\bin`, and adds it to your user `PATH`. Restart your terminal after install.

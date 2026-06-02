@@ -82,7 +82,7 @@ These functions shell out to the `aipdf` binary.
 **Install the CLI** (one-liner):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tanmaysheoran/ai.pdf/main/install.sh | sh
+curl -fsSL https://aipdf.lackofabetter.work/install.sh | sh
 ```
 
 Or from a cloned repo:
