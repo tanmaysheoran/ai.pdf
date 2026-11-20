@@ -1,7 +1,7 @@
-# install.ps1 — install the aipdf CLI on Windows
+﻿# install.ps1 — install the aipdf CLI on Windows
 #
 # Usage (remote, from PowerShell):
-#   irm https://aipdf.lackofabetter.work/install.ps1 | iex
+#   irm https://aipdf.arp244.dev/install.ps1 | iex
 #
 # Override repository:
 #   $env:AIPDF_REPO = "https://github.com/your-fork/ai.pdf"; irm ... | iex

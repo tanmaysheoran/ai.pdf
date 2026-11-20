@@ -2,7 +2,7 @@
 # install.sh — install the aipdf CLI
 #
 # Usage (remote):
-#   curl -fsSL https://aipdf.lackofabetter.work/install.sh | sh
+#   curl -fsSL https://aipdf.arp244.dev/install.sh | sh
 #
 # Usage (local repo):
 #   ./install.sh
